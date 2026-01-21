@@ -1,0 +1,46 @@
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Data files (too large & privacy)
+data/uploads/
+data/pose_sequences/none/*.json
+data/pose_sequences/stimulant/*.json
+data/pose_sequences/depressant/*.json
+data/pose_sequences/cannabis/*.json
+
+# Keep folder structure
+!data/pose_sequences/none/.gitkeep
+!data/pose_sequences/stimulant/.gitkeep
+!data/pose_sequences/depressant/.gitkeep
+!data/pose_sequences/cannabis/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Models (large files)
+models/*.pt
+models/*.pth
+models/*.pkl
+models/*.h5
+
+# Logs
+*.log
+
+# Environment variables
+.env
