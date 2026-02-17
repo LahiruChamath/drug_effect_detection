@@ -37,7 +37,7 @@ class PoseFrame:
     @classmethod
     def from_dict(cls, data: dict) -> 'PoseFrame':
         return cls(
-            frame_number=data['frame_number'],
+            frame_number=data.get('frame_number, 0'),
             timestamp=data['timestamp'],
             landmarks=np.array(data['landmarks']) if data['landmarks'] else None
         )
