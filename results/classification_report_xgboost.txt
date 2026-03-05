@@ -1,0 +1,26 @@
+======================================================================
+  XGBoost - COMPLETE CLASSIFICATION REPORT
+======================================================================
+
+OVERALL METRICS
+----------------------------------------
+Accuracy:             0.8500 (85.00%)
+Precision (macro):    0.8578
+Precision (weighted): 0.8578
+Recall (macro):       0.8500
+Recall (weighted):    0.8500
+F1-Score (macro):     0.8477
+F1-Score (weighted):  0.8477
+Log Loss:             0.4502
+ROC AUC (macro):      0.9641
+ROC AUC (weighted):   0.9641
+
+
+PER-CLASS METRICS
+----------------------------------------------------------------------
+Class           Precision    Recall       F1-Score     ROC AUC     
+----------------------------------------------------------------------
+none            0.7647       0.8667       0.8125       0.9526      
+stimulant       0.8333       0.6667       0.7407       0.9407      
+depressant      0.8333       1.0000       0.9091       0.9926      
+cannabis        1.0000       0.8667       0.9286       0.9704      
