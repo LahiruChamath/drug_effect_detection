@@ -1,8 +1,10 @@
 import 'dart:async';
-import 'dart:io';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
-import 'package:camera/camera.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:web/web.dart' as web;
+import 'dart:js_interop';
 import '../theme/app_theme.dart';
 import '../utils/constants.dart';
 import 'analyzing_screen.dart';
@@ -15,53 +17,90 @@ class CameraScreen extends StatefulWidget {
 }
 
 class _CameraScreenState extends State<CameraScreen> {
-  CameraController? _controller;
-  List<CameraDescription>? _cameras;
-  bool _isInitialized = false;
   bool _isRecording = false;
   int _countdown = 3;
   int _recordingSeconds = 0;
   Timer? _countdownTimer;
   Timer? _recordingTimer;
-  String? _videoPath;
+  bool _showCountdown = false;
+  bool _cameraReady = false;
+  bool _cameraError = false;
+  final String _viewId = 'webcam-${DateTime.now().millisecondsSinceEpoch}';
+  web.MediaStream? _stream;
 
   @override
   void initState() {
     super.initState();
-    _initCamera();
-  }
-
-  Future<void> _initCamera() async {
-    try {
-      _cameras = await availableCameras();
-      
-      if (_cameras != null && _cameras!.isNotEmpty) {
-        // Use front camera if available
-        final frontCamera = _cameras!.firstWhere(
-          (camera) => camera.lensDirection == CameraLensDirection.front,
-          orElse: () => _cameras!.first,
-        );
-
-        _controller = CameraController(
-          frontCamera,
-          ResolutionPreset.medium,
-          enableAudio: false,
-        );
-
-        await _controller!.initialize();
-        
-        if (mounted) {
-          setState(() => _isInitialized = true);
-        }
-      }
-    } catch (e) {
-      debugPrint('Error initializing camera: $e');
+    if (kIsWeb) {
+      _initWebCamera();
     }
   }
 
+  Future<void> _initWebCamera() async {
+    try {
+      // Create mirrored <video> element
+      final video = web.HTMLVideoElement()
+        ..autoplay = true
+        ..muted = true
+        ..style.width = '100%'
+        ..style.height = '100%'
+        ..style.objectFit = 'cover'
+        ..style.transform = 'scaleX(-1)';
+
+      // Register platform view
+      ui_web.platformViewRegistry.registerViewFactory(
+        _viewId,
+        (int id) => video,
+      );
+
+      // Request camera access
+      final constraints = web.MediaStreamConstraints(video: true.toJS);
+      final stream = await web.window.navigator.mediaDevices
+          .getUserMedia(constraints)
+          .toDart;
+
+      _stream = stream;
+      video.srcObject = stream;
+
+      if (mounted) {
+        setState(() {
+          _cameraReady = true;
+          _cameraError = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _cameraError = true;
+          _cameraReady = false;
+        });
+      }
+    }
+  }
+
+  void _stopStream() {
+    if (_stream != null) {
+      final tracks = _stream!.getVideoTracks().toDart;
+      for (final t in tracks) {
+        t.stop();
+      }
+      _stream = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    _recordingTimer?.cancel();
+    if (kIsWeb) _stopStream();
+    super.dispose();
+  }
+
   void _startCountdown() {
-    setState(() => _countdown = 3);
-    
+    setState(() {
+      _showCountdown = true;
+      _countdown = 3;
+    });
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_countdown > 1) {
         setState(() => _countdown--);
@@ -72,65 +111,35 @@ class _CameraScreenState extends State<CameraScreen> {
     });
   }
 
-  Future<void> _startRecording() async {
-    if (_controller == null || !_controller!.value.isInitialized) return;
-
-    try {
-      // Get temp directory
-      final directory = await getTemporaryDirectory();
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      _videoPath = '${directory.path}/safepose_$timestamp.mp4';
-
-      await _controller!.startVideoRecording();
-      
-      setState(() {
-        _isRecording = true;
-        _recordingSeconds = Constants.recordingDuration;
-      });
-
-      // Recording countdown
-      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        if (_recordingSeconds > 1) {
-          setState(() => _recordingSeconds--);
-        } else {
-          timer.cancel();
-          _stopRecording();
-        }
-      });
-    } catch (e) {
-      debugPrint('Error starting recording: $e');
-    }
-  }
-
-  Future<void> _stopRecording() async {
-    if (_controller == null || !_controller!.value.isRecordingVideo) return;
-
-    try {
-      final videoFile = await _controller!.stopVideoRecording();
-      _videoPath = videoFile.path;
-
-      setState(() => _isRecording = false);
-
-      // Navigate to analyzing screen
-      if (mounted && _videoPath != null) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => AnalyzingScreen(videoPath: _videoPath!),
-          ),
-        );
+  void _startRecording() {
+    setState(() {
+      _showCountdown = false;
+      _isRecording = true;
+      _recordingSeconds = Constants.recordingDuration;
+    });
+    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_recordingSeconds > 1) {
+        setState(() => _recordingSeconds--);
+      } else {
+        timer.cancel();
+        _stopRecording();
       }
-    } catch (e) {
-      debugPrint('Error stopping recording: $e');
-    }
+    });
   }
 
-  @override
-  void dispose() {
-    _countdownTimer?.cancel();
-    _recordingTimer?.cancel();
-    _controller?.dispose();
-    super.dispose();
+  void _stopRecording() {
+    setState(() => _isRecording = false);
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const AnalyzingScreen(
+            videoPath: 'web_recording',
+            poseFrames: null,
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -143,171 +152,40 @@ class _CameraScreenState extends State<CameraScreen> {
           icon: const Icon(Icons.close, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
+        title: const Text('Camera',
+            style: TextStyle(color: Colors.white)),
       ),
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Camera Preview
-          if (_isInitialized && _controller != null)
-            CameraPreview(_controller!)
+          // ── Camera Feed ─────────────────────────────────────────
+          if (kIsWeb && _cameraReady)
+            HtmlElementView(viewType: _viewId)
+          else if (kIsWeb && _cameraError)
+            _buildErrorPlaceholder()
           else
-            const Center(
-              child: CircularProgressIndicator(
-                color: AppTheme.primaryColor,
-              ),
-            ),
+            _buildLoadingPlaceholder(),
 
-          // Overlay
+          // ── Overlays ─────────────────────────────────────────────
           SafeArea(
             child: Column(
               children: [
                 const Spacer(),
-                
-                // Countdown or Recording indicator
-                if (_countdown > 0 && !_isRecording && _countdownTimer != null)
-                  Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        '$_countdown',
-                        style: const TextStyle(
-                          fontSize: 60,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.primaryColor,
-                        ),
-                      ),
-                    ),
-                  ),
 
-                if (_isRecording)
-                  Column(
-                    children: [
-                      // Recording indicator
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            width: 12,
-                            height: 12,
-                            decoration: const BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'RECORDING',
-                            style: TextStyle(
-                              color: Colors.red,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      
-                      // Countdown circle
-                      Container(
-                        width: 100,
-                        height: 100,
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppTheme.primaryColor,
-                            width: 4,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '$_recordingSeconds',
-                            style: const TextStyle(
-                              fontSize: 40,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'seconds remaining',
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                    ],
-                  ),
+                if (_showCountdown) _buildCountdownBadge(),
+                if (_isRecording) _buildRecordingIndicator(),
 
                 const Spacer(),
 
-                // Progress bar
-                if (_isRecording)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: LinearProgressIndicator(
-                        value: (Constants.recordingDuration - _recordingSeconds) / 
-                               Constants.recordingDuration,
-                        backgroundColor: Colors.white24,
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          AppTheme.primaryColor,
-                        ),
-                        minHeight: 8,
-                      ),
-                    ),
-                  ),
+                if (_isRecording) _buildProgressBar(),
 
                 const SizedBox(height: 20),
 
-                // Instructions
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  child: Text(
-                    _isRecording
-                        ? 'Keep still • Stay in frame'
-                        : 'Press button to start recording',
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ),
+                _buildInstructionPill(),
 
                 const SizedBox(height: 30),
 
-                // Record Button
-                if (!_isRecording && _countdownTimer == null)
-                  GestureDetector(
-                    onTap: _isInitialized ? _startCountdown : null,
-                    child: Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 4),
-                      ),
-                      child: Center(
-                        child: Container(
-                          width: 60,
-                          height: 60,
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                if (!_isRecording && !_showCountdown) _buildRecordButton(),
 
                 const SizedBox(height: 40),
               ],
@@ -317,4 +195,148 @@ class _CameraScreenState extends State<CameraScreen> {
       ),
     );
   }
+
+  Widget _buildLoadingPlaceholder() => Container(
+        color: Colors.grey.shade900,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(color: AppTheme.primaryColor),
+              const SizedBox(height: 16),
+              Text(
+                kIsWeb ? 'Starting camera...' : 'Camera Preview',
+                style: const TextStyle(color: Colors.white70, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+
+  Widget _buildErrorPlaceholder() => Container(
+        color: Colors.grey.shade900,
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.no_photography, size: 80, color: Colors.white54),
+              SizedBox(height: 16),
+              Text('Camera access denied',
+                  style: TextStyle(color: Colors.white70, fontSize: 18)),
+              SizedBox(height: 8),
+              Text(
+                'Allow camera permission in your browser\nand reload the page.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white38, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      );
+
+  Widget _buildCountdownBadge() => Container(
+        width: 120,
+        height: 120,
+        decoration: const BoxDecoration(
+            color: Colors.black54, shape: BoxShape.circle),
+        child: Center(
+          child: Text('$_countdown',
+              style: const TextStyle(
+                  fontSize: 60,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.primaryColor)),
+        ),
+      );
+
+  Widget _buildRecordingIndicator() => Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                  width: 12,
+                  height: 12,
+                  decoration: const BoxDecoration(
+                      color: Colors.red, shape: BoxShape.circle)),
+              const SizedBox(width: 8),
+              const Text('RECORDING',
+                  style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppTheme.primaryColor, width: 4),
+            ),
+            child: Center(
+              child: Text('$_recordingSeconds',
+                  style: const TextStyle(
+                      fontSize: 40,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text('seconds remaining',
+              style: TextStyle(color: Colors.white70)),
+        ],
+      );
+
+  Widget _buildProgressBar() => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: LinearProgressIndicator(
+            value: (Constants.recordingDuration - _recordingSeconds) /
+                Constants.recordingDuration,
+            backgroundColor: Colors.white24,
+            valueColor:
+                const AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+            minHeight: 8,
+          ),
+        ),
+      );
+
+  Widget _buildInstructionPill() => Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+            color: Colors.black54,
+            borderRadius: BorderRadius.circular(30)),
+        child: Text(
+          _isRecording
+              ? 'Keep still • Stay in frame'
+              : _cameraError
+                  ? 'Camera unavailable — tap to proceed anyway'
+                  : 'Press button to start recording',
+          style: const TextStyle(color: Colors.white),
+          textAlign: TextAlign.center,
+        ),
+      );
+
+  Widget _buildRecordButton() => GestureDetector(
+        onTap: _startCountdown,
+        child: Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 4)),
+          child: Center(
+            child: Container(
+              width: 60,
+              height: 60,
+              decoration: const BoxDecoration(
+                  color: Colors.red, shape: BoxShape.circle),
+            ),
+          ),
+        ),
+      );
 }

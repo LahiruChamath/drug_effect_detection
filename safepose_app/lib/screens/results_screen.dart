@@ -3,8 +3,6 @@ import '../theme/app_theme.dart';
 import '../models/scan_result.dart';
 import '../widgets/custom_button.dart';
 import 'camera_screen.dart';
-import 'home_screen.dart';
-import '../models/user.dart';
 
 class ResultsScreen extends StatelessWidget {
   final ScanResult result;

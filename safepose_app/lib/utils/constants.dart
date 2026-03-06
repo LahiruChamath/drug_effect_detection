@@ -1,19 +1,20 @@
 class Constants {
   // API Configuration
-  // Change this to your MacBook's IP when testing
-  static const String baseUrl = "http://192.168.1.100:8000";
-  
-  // For localhost testing on iOS simulator
-  // static const String baseUrl = "http://localhost:8000";
+  // Use 127.0.0.1 for Chrome, use your IP for real device
+  static const String baseUrl = "http://127.0.0.1:5001";
   
   // API Endpoints
   static const String loginEndpoint = "/api/auth/login";
   static const String registerEndpoint = "/api/auth/register";
-  static const String analyzeEndpoint = "/api/scan/analyze";
-  static const String historyEndpoint = "/api/scan/history";
+  static const String meEndpoint = "/api/auth/me";
+  static const String predictEndpoint = "/api/predict";
+  static const String scansEndpoint = "/api/scans";
+  static const String statsEndpoint = "/api/stats";
+  static const String healthEndpoint = "/api/health";
   
   // App Configuration
   static const int recordingDuration = 10; // seconds
+  static const int targetFrames = 150; // 5 seconds at 30fps
   static const double minDetectionRate = 0.7; // 70%
   
   // Storage Keys

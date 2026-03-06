@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../models/user.dart';
+import '../services/api_service.dart';
 import 'scan_instructions_screen.dart';
 import 'history_screen.dart';
 import 'profile_screen.dart';
@@ -16,103 +17,157 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  Map<String, dynamic>? _stats;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    try {
+      final stats = await ApiService().getStats();
+      if (mounted) {
+        setState(() {
+          _stats = stats;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  int get _totalScans => _stats?['total_scans'] ?? 0;
+  
+  Map<String, dynamic> get _byPrediction {
+    final raw = _stats?['by_prediction'];
+    if (raw == null) return {};
+    // json.decode returns LinkedMap<dynamic,dynamic> on web — convert explicitly
+    return Map<String, dynamic>.from(raw as Map);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Hello, ${widget.user.name.split(' ').first} 👋',
-                        style: Theme.of(context).textTheme.displaySmall,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Ready for a scan?',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppTheme.textSecondary,
-                            ),
-                      ),
-                    ],
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ProfileScreen(user: widget.user),
-                        ),
-                      );
-                    },
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryLight,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(
-                        Icons.person_outline,
-                        color: AppTheme.primaryColor,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-              
-              // Stats Card
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: AppTheme.cardShadow,
-                ),
-                child: Row(
+        child: RefreshIndicator(
+          onRefresh: _loadStats,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(
-                      child: _buildStatItem(
-                        context,
-                        '12',
-                        'Total Scans',
-                        Icons.analytics_outlined,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Hello, ${widget.user.name.split(' ').first} 👋',
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Ready for a scan?',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                        ),
+                      ],
                     ),
-                    Container(
-                      width: 1,
-                      height: 50,
-                      color: AppTheme.dividerColor,
-                    ),
-                    Expanded(
-                      child: _buildStatItem(
-                        context,
-                        '98%',
-                        'Avg Detection',
-                        Icons.verified_outlined,
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ProfileScreen(user: widget.user),
+                          ),
+                        ).then((_) => _loadStats());
+                      },
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.person_outline,
+                          color: AppTheme.primaryColor,
+                        ),
                       ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 32),
-              
-              // Start Scan Card
-              Expanded(
-                child: Container(
+                const SizedBox(height: 32),
+                
+                // Stats Card
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: _isLoading
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(20),
+                            child: CircularProgressIndicator(
+                              color: AppTheme.primaryColor,
+                            ),
+                          ),
+                        )
+                      : Row(
+                          children: [
+                            Expanded(
+                              child: _buildStatItem(
+                                context,
+                                '$_totalScans',
+                                'Total Scans',
+                                Icons.analytics_outlined,
+                              ),
+                            ),
+                            Container(
+                              width: 1,
+                              height: 50,
+                              color: AppTheme.borderColor,
+                            ),
+                            Expanded(
+                              child: _buildStatItem(
+                                context,
+                                '${_byPrediction['none'] ?? 0}',
+                                'Normal',
+                                Icons.check_circle_outline,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+                const SizedBox(height: 32),
+                
+                // Start Scan Card
+                Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
@@ -121,11 +176,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       end: Alignment.bottomRight,
                       colors: [
                         AppTheme.primaryColor,
-                        AppTheme.primaryDark,
+                        AppTheme.primaryColor.withOpacity(0.8),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(24),
-                    boxShadow: AppTheme.buttonShadow,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primaryColor.withOpacity(0.3),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -171,7 +232,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               MaterialPageRoute(
                                 builder: (_) => const ScanInstructionsScreen(),
                               ),
-                            );
+                            ).then((_) => _loadStats());
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
@@ -192,46 +253,68 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              
-              // Quick Actions
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildQuickAction(
-                      context,
-                      Icons.history,
-                      'History',
-                      () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const HistoryScreen()),
-                        );
-                      },
-                    ),
+                const SizedBox(height: 24),
+                
+                // Prediction Breakdown
+                if (!_isLoading && _byPrediction.isNotEmpty) ...[
+                  Text(
+                    'Scan Results',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildQuickAction(
-                      context,
-                      Icons.help_outline,
-                      'Help',
-                      () {},
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildQuickAction(
-                      context,
-                      Icons.settings_outlined,
-                      'Settings',
-                      () {},
-                    ),
-                  ),
+                  const SizedBox(height: 16),
+                  _buildPredictionBreakdown(),
+                  const SizedBox(height: 24),
                 ],
-              ),
-            ],
+                
+                // Quick Actions
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildQuickAction(
+                        context,
+                        Icons.history,
+                        'History',
+                        () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                          ).then((_) => _loadStats());
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _buildQuickAction(
+                        context,
+                        Icons.help_outline,
+                        'Help',
+                        () {
+                          _showHelpDialog();
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _buildQuickAction(
+                        context,
+                        Icons.settings_outlined,
+                        'Settings',
+                        () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ProfileScreen(user: widget.user),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -248,7 +331,25 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
+          onTap: (index) {
+            setState(() => _currentIndex = index);
+            if (index == 2) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const HistoryScreen()),
+              );
+            } else if (index == 3) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ProfileScreen(user: widget.user),
+                ),
+              );
+            }
+          },
+          type: BottomNavigationBarType.fixed,
+          selectedItemColor: AppTheme.primaryColor,
+          unselectedItemColor: AppTheme.textSecondary,
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.home_outlined),
@@ -276,6 +377,151 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildPredictionBreakdown() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: _byPrediction.entries.map((entry) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                _getPredictionIcon(entry.key),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _getPredictionLabel(entry.key),
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _getPredictionColor(entry.key).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${entry.value}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: _getPredictionColor(entry.key),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _getPredictionIcon(String prediction) {
+    IconData icon;
+    Color color;
+    
+    switch (prediction.toLowerCase()) {
+      case 'none':
+        icon = Icons.check_circle;
+        color = AppTheme.successColor;
+        break;
+      case 'stimulant':
+        icon = Icons.flash_on;
+        color = AppTheme.warningColor;
+        break;
+      case 'depressant':
+        icon = Icons.arrow_downward;
+        color = AppTheme.errorColor;
+        break;
+      case 'cannabis':
+        icon = Icons.grass;
+        color = Colors.amber;
+        break;
+      default:
+        icon = Icons.help;
+        color = AppTheme.textSecondary;
+    }
+    
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(icon, color: color, size: 20),
+    );
+  }
+
+  String _getPredictionLabel(String prediction) {
+    switch (prediction.toLowerCase()) {
+      case 'none':
+        return 'Normal';
+      case 'stimulant':
+        return 'Stimulant';
+      case 'depressant':
+        return 'Depressant';
+      case 'cannabis':
+        return 'Cannabis';
+      default:
+        return prediction;
+    }
+  }
+
+  Color _getPredictionColor(String prediction) {
+    switch (prediction.toLowerCase()) {
+      case 'none':
+        return AppTheme.successColor;
+      case 'stimulant':
+        return AppTheme.warningColor;
+      case 'depressant':
+        return AppTheme.errorColor;
+      case 'cannabis':
+        return Colors.amber;
+      default:
+        return AppTheme.textSecondary;
+    }
+  }
+
+  void _showHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('How to Use SafePose'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('1. Tap "Begin Scan" to start'),
+            SizedBox(height: 8),
+            Text('2. Follow the on-screen instructions'),
+            SizedBox(height: 8),
+            Text('3. Stay still for 10 seconds'),
+            SizedBox(height: 8),
+            Text('4. View your results'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatItem(
     BuildContext context,
     String value,
@@ -291,8 +537,9 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 8),
             Text(
               value,
-              style: Theme.of(context).textTheme.displaySmall?.copyWith(
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     color: AppTheme.primaryColor,
+                    fontWeight: FontWeight.bold,
                   ),
             ),
           ],
@@ -300,7 +547,9 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(height: 4),
         Text(
           label,
-          style: Theme.of(context).textTheme.bodySmall,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppTheme.textSecondary,
+              ),
         ),
       ],
     );
@@ -319,7 +568,13 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: AppTheme.cardShadow,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
           children: [

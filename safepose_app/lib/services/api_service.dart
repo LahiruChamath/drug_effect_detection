@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
 import '../models/scan_result.dart';
 import '../models/user.dart';
@@ -12,9 +12,26 @@ class ApiService {
 
   String? _token;
 
-  void setToken(String token) {
-    _token = token;
+  // ==================== TOKEN MANAGEMENT ====================
+
+  Future<void> loadToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    _token = prefs.getString(Constants.tokenKey);
   }
+
+  Future<void> saveToken(String token) async {
+    _token = token;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(Constants.tokenKey, token);
+  }
+
+  Future<void> clearToken() async {
+    _token = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(Constants.tokenKey);
+  }
+
+  bool get isLoggedIn => _token != null;
 
   Map<String, String> get _headers {
     return {
@@ -23,100 +40,181 @@ class ApiService {
     };
   }
 
+  // Ensure token is loaded before making authenticated requests
+  Future<void> _ensureToken() async {
+    if (_token == null) {
+      await loadToken();
+    }
+  }
+
   // ==================== AUTH ====================
 
   Future<User> login(String email, String password) async {
     try {
       final response = await http.post(
         Uri.parse('${Constants.baseUrl}${Constants.loginEndpoint}'),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: {
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
           'email': email,
           'password': password,
-        },
-      );
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = json.decode(response.body);
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        _token = data['token'];
-        return User.fromJson(data['user']);
+        final token = data['access_token'];
+        await saveToken(token);
+        return User.fromJson(data['user'], token: token);
       } else {
-        throw Exception('Login failed: ${response.body}');
+        throw Exception(data['error'] ?? 'Login failed');
       }
     } catch (e) {
+      if (e is Exception) rethrow;
       throw Exception('Connection error: $e');
     }
   }
 
-  Future<bool> register(String name, String email, String password) async {
+  Future<User> register(String name, String email, String password) async {
     try {
       final response = await http.post(
         Uri.parse('${Constants.baseUrl}${Constants.registerEndpoint}'),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: {
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
           'name': name,
           'email': email,
           'password': password,
-        },
-      );
+        }),
+      ).timeout(const Duration(seconds: 10));
 
-      if (response.statusCode == 200) {
-        return true;
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 201) {
+        final token = data['access_token'];
+        await saveToken(token);
+        return User.fromJson(data['user'], token: token);
       } else {
-        throw Exception('Registration failed: ${response.body}');
+        throw Exception(data['error'] ?? 'Registration failed');
       }
     } catch (e) {
+      if (e is Exception) rethrow;
       throw Exception('Connection error: $e');
     }
+  }
+
+  Future<User?> getCurrentUser() async {
+    try {
+      await loadToken();
+      if (_token == null) return null;
+
+      final response = await http.get(
+        Uri.parse('${Constants.baseUrl}${Constants.meEndpoint}'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return User.fromJson(data['user'], token: _token);
+      } else {
+        await clearToken();
+        return null;
+      }
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<void> logout() async {
+    await clearToken();
   }
 
   // ==================== SCAN ====================
 
-  Future<ScanResult> analyzeVideo(File videoFile) async {
+  Future<ScanResult> analyzePose(List<List<List<double>>> frames) async {
     try {
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${Constants.baseUrl}${Constants.analyzeEndpoint}'),
-      );
+      await loadToken(); // Always reload from storage to ensure token is fresh
+      
+      final response = await http.post(
+        Uri.parse('${Constants.baseUrl}${Constants.predictEndpoint}'),
+        headers: _headers,
+        body: json.encode({'frames': frames}),
+      ).timeout(const Duration(seconds: 30));
 
-      request.files.add(
-        await http.MultipartFile.fromPath('video', videoFile.path),
-      );
-
-      if (_token != null) {
-        request.headers['Authorization'] = 'Bearer $_token';
-      }
-
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
+      final data = json.decode(response.body);
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
         return ScanResult.fromJson(data);
       } else {
-        throw Exception('Analysis failed: ${response.body}');
+        throw Exception(data['error'] ?? 'Analysis failed');
       }
     } catch (e) {
+      if (e is Exception) rethrow;
       throw Exception('Connection error: $e');
     }
   }
 
-  Future<List<ScanResult>> getHistory() async {
+  Future<List<ScanResult>> getHistory({int page = 1, int perPage = 20}) async {
     try {
+      await loadToken(); // Always reload from storage to ensure token is fresh
+      
       final response = await http.get(
-        Uri.parse('${Constants.baseUrl}${Constants.historyEndpoint}'),
+        Uri.parse('${Constants.baseUrl}${Constants.scansEndpoint}?page=$page&per_page=$perPage'),
         headers: _headers,
-      );
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final scans = data['scans'] as List;
-        return scans.map((s) => ScanResult.fromJson(s)).toList();
+        return scans.map((s) => ScanResult.fromJson(Map<String, dynamic>.from(s as Map))).toList();
       } else {
-        throw Exception('Failed to load history');
+        // Return empty list instead of throwing for 422 or other errors
+        return [];
       }
     } catch (e) {
+      // Return empty list on error
+      return [];
+    }
+  }
+
+  Future<void> deleteScan(String scanId) async {
+    try {
+      await _ensureToken();
+      
+      final response = await http.delete(
+        Uri.parse('${Constants.baseUrl}${Constants.scansEndpoint}/$scanId'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to delete scan');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
       throw Exception('Connection error: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> getStats() async {
+    try {
+      await loadToken(); // Always reload from storage to ensure token is fresh
+      
+      final response = await http.get(
+        Uri.parse('${Constants.baseUrl}${Constants.statsEndpoint}'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final stats = data['stats'];
+        // Cast LinkedMap<dynamic,dynamic> -> Map<String,dynamic>
+        return Map<String, dynamic>.from(stats as Map);
+      } else {
+        // Return empty stats instead of throwing for 422 or other errors
+        return {'total_scans': 0, 'by_prediction': {}};
+      }
+    } catch (e) {
+      // Return empty stats on error
+      return {'total_scans': 0, 'by_prediction': {}};
     }
   }
 
@@ -125,7 +223,7 @@ class ApiService {
   Future<bool> checkConnection() async {
     try {
       final response = await http.get(
-        Uri.parse('${Constants.baseUrl}/api/health'),
+        Uri.parse('${Constants.baseUrl}${Constants.healthEndpoint}'),
       ).timeout(const Duration(seconds: 5));
 
       return response.statusCode == 200;

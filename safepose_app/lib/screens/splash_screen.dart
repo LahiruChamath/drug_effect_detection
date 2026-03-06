@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../services/api_service.dart';
 import 'welcome_screen.dart';
+import 'home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -34,14 +36,43 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    Future.delayed(const Duration(seconds: 3), () {
+    _checkAuthAndNavigate();
+  }
+
+  Future<void> _checkAuthAndNavigate() async {
+    // Wait for animation
+    await Future.delayed(const Duration(seconds: 2));
+    
+    if (!mounted) return;
+
+    try {
+      // Check if user is already logged in
+      final user = await ApiService().getCurrentUser();
+      
+      if (mounted) {
+        if (user != null) {
+          // User is logged in, go to home
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => HomeScreen(user: user)),
+          );
+        } else {
+          // Not logged in, go to welcome
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+          );
+        }
+      }
+    } catch (e) {
+      // Error checking auth, go to welcome
       if (mounted) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const WelcomeScreen()),
         );
       }
-    });
+    }
   }
 
   @override
@@ -75,11 +106,17 @@ class _SplashScreenState extends State<SplashScreen>
                           end: Alignment.bottomRight,
                           colors: [
                             AppTheme.primaryColor,
-                            AppTheme.primaryDark,
+                            AppTheme.primaryColor.withOpacity(0.7),
                           ],
                         ),
                         borderRadius: BorderRadius.circular(28),
-                        boxShadow: AppTheme.buttonShadow,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primaryColor.withOpacity(0.3),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
                       ),
                       child: const Icon(
                         Icons.shield_rounded,
@@ -92,8 +129,9 @@ class _SplashScreenState extends State<SplashScreen>
                     // App Name
                     Text(
                       'SafePose',
-                      style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                      style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                             fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
                           ),
                     ),
                     const SizedBox(height: 8),
@@ -104,6 +142,20 @@ class _SplashScreenState extends State<SplashScreen>
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                             color: AppTheme.textSecondary,
                           ),
+                    ),
+                    
+                    const SizedBox(height: 48),
+                    
+                    // Loading indicator
+                    const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppTheme.primaryColor,
+                        ),
+                      ),
                     ),
                   ],
                 ),
