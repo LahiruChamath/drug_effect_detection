@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../models/user.dart';
 import '../services/api_service.dart';
@@ -70,6 +71,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     }
+  }
+
+  Future<void> _showCameraPreferencesDialog() async {
+    final prefs = await SharedPreferences.getInstance();
+    String currentPreference = prefs.getString('camera_preference') ?? 'back';
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Text('Camera Default', style: TextStyle(fontWeight: FontWeight.bold)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RadioListTile<String>(
+                    title: const Text('Back Camera (Main)'),
+                    value: 'back',
+                    groupValue: currentPreference,
+                    activeColor: AppTheme.primaryColor,
+                    onChanged: (value) async {
+                      setDialogState(() => currentPreference = value!);
+                      await prefs.setString('camera_preference', value!);
+                      if (context.mounted) Navigator.pop(context);
+                    },
+                  ),
+                  RadioListTile<String>(
+                    title: const Text('Front Camera (Selfie)'),
+                    value: 'front',
+                    groupValue: currentPreference,
+                    activeColor: AppTheme.primaryColor,
+                    onChanged: (value) async {
+                      setDialogState(() => currentPreference = value!);
+                      await prefs.setString('camera_preference', value!);
+                      if (context.mounted) Navigator.pop(context);
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   int get _totalScans => _stats?['total_scans'] ?? 0;
@@ -181,7 +230,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Icons.camera_alt_outlined,
                       'Camera Preferences',
                       trailing: _buildChevron(),
-                      onTap: () => _showComingSoon('Camera Preferences'),
+                      onTap: _showCameraPreferencesDialog,
                     ),
                     _buildDivider(),
                     _buildMenuItem(
@@ -324,9 +373,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _getStreak() {
     // Simple streak: show total scans as a basic metric
     // A real streak counter would need date tracking
-    if (_totalScans == 0) return '0';
-    if (_totalScans < 5) return '🔥${_totalScans}';
-    return '🔥$_totalScans';
+    return '$_totalScans';
   }
 
   Widget _buildSection({

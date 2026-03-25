@@ -20,24 +20,24 @@ class WelcomeScreen extends StatelessWidget {
               
               // Logo
               Container(
-                width: 90,
-                height: 90,
+                width: 120,
+                height: 120,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppTheme.primaryColor,
-                      AppTheme.primaryDark,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: AppTheme.buttonShadow,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
                 ),
-                child: const Icon(
-                  Icons.shield_rounded,
-                  size: 45,
-                  color: Colors.white,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: Image.asset(
+                    'assets/images/app_icon.png',
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
               const SizedBox(height: 32),

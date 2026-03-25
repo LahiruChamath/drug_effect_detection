@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
@@ -138,18 +139,67 @@ class ApiService {
         Uri.parse('${Constants.baseUrl}${Constants.predictEndpoint}'),
         headers: _headers,
         body: json.encode({'frames': frames}),
-      ).timeout(const Duration(seconds: 30));
+      ).timeout(const Duration(seconds: 10));
 
-      final data = json.decode(response.body);
+      print('API Response Status: ${response.statusCode}');
+      print('API Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
-        return ScanResult.fromJson(data);
+        return ScanResult.fromJson(json.decode(response.body));
       } else {
-        throw Exception(data['error'] ?? 'Analysis failed');
+        throw Exception('Analysis failed: ${json.decode(response.body)['error']}');
       }
     } catch (e) {
       if (e is Exception) rethrow;
       throw Exception('Connection error: $e');
+    }
+  }
+
+  Future<ScanResult> uploadVideoForAnalysis(String videoPath) async {
+    try {
+      await loadToken();
+      
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${Constants.baseUrl}${Constants.analyzeVideoEndpoint}'),
+      );
+      
+      if (_token != null) {
+        request.headers['Authorization'] = 'Bearer $_token';
+      }
+      
+      if (kIsWeb) {
+        // On Web, we must fetch the bytes from the blob URL first
+        final response = await http.get(Uri.parse(videoPath));
+        final bytes = response.bodyBytes;
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'video',
+            bytes,
+            filename: 'recording.mp4',
+          ),
+        );
+      } else {
+        request.files.add(
+          await http.MultipartFile.fromPath('video', videoPath),
+        );
+      }
+      
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 60));
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      print('API Response Status: ${response.statusCode}');
+      print('API Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        return ScanResult.fromJson(json.decode(response.body));
+      } else {
+        final errorMsg = json.decode(response.body)['error'] ?? 'Unknown server error';
+        throw Exception('Video analysis failed: $errorMsg');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Upload error: $e');
     }
   }
 

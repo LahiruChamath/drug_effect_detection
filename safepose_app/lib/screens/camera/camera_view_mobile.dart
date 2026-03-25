@@ -5,19 +5,21 @@ class UniversalCameraView extends StatefulWidget {
   final Widget Function(BuildContext) loadingBuilder;
   final Widget Function(BuildContext, String) errorBuilder;
   final VoidCallback onReady;
+  final CameraLensDirection initialDirection;
 
   const UniversalCameraView({
     super.key,
     required this.loadingBuilder,
     required this.errorBuilder,
     required this.onReady,
+    this.initialDirection = CameraLensDirection.back,
   });
 
   @override
-  State<UniversalCameraView> createState() => _UniversalCameraViewState();
+  State<UniversalCameraView> createState() => UniversalCameraViewState();
 }
 
-class _UniversalCameraViewState extends State<UniversalCameraView> {
+class UniversalCameraViewState extends State<UniversalCameraView> {
   CameraController? _controller;
   bool _cameraError = false;
   String _errorMessage = '';
@@ -35,15 +37,13 @@ class _UniversalCameraViewState extends State<UniversalCameraView> {
         throw Exception('No cameras found');
       }
       
-      // Try to find the front camera
       CameraDescription? selectedCamera;
       for (final camera in cameras) {
-        if (camera.lensDirection == CameraLensDirection.front) {
+        if (camera.lensDirection == widget.initialDirection) {
           selectedCamera = camera;
           break;
         }
       }
-      // Fallback to the first available camera
       selectedCamera ??= cameras.first;
 
       _controller = CameraController(
@@ -66,6 +66,19 @@ class _UniversalCameraViewState extends State<UniversalCameraView> {
         });
       }
     }
+  }
+
+  Future<void> startRecording() async {
+    if (_controller != null && !_controller!.value.isRecordingVideo) {
+      await _controller!.startVideoRecording();
+    }
+  }
+
+  Future<XFile?> stopRecording() async {
+    if (_controller != null && _controller!.value.isRecordingVideo) {
+      return await _controller!.stopVideoRecording();
+    }
+    return null;
   }
 
   @override

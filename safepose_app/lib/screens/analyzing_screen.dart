@@ -6,12 +6,10 @@ import 'results_screen.dart';
 
 class AnalyzingScreen extends StatefulWidget {
   final String videoPath;
-  final List<List<List<double>>>? poseFrames;
 
   const AnalyzingScreen({
     super.key,
     required this.videoPath,
-    this.poseFrames,
   });
 
   @override
@@ -34,37 +32,18 @@ class _AnalyzingScreenState extends State<AnalyzingScreen>
     _startAnalysis();
   }
 
-  /// Generate realistic-looking dummy pose frames for web demo mode.
-  /// Each frame = 33 landmarks × 4 values (x, y, z, visibility).
-  List<List<List<double>>> _generateDummyFrames({int frameCount = 90}) {
-    final rng = Random();
-    return List.generate(frameCount, (_) {
-      return List.generate(33, (landmarkIdx) {
-        return [
-          0.3 + rng.nextDouble() * 0.4,  // x  (0-1)
-          0.2 + rng.nextDouble() * 0.6,  // y  (0-1)
-          rng.nextDouble() * 0.1 - 0.05, // z
-          0.8 + rng.nextDouble() * 0.2,  // visibility
-        ];
-      });
-    });
-  }
-
   Future<void> _startAnalysis() async {
     try {
-      setState(() => _status = 'Processing video...');
+      setState(() => _status = 'Uploading video...');
       await Future.delayed(const Duration(milliseconds: 800));
 
-      setState(() => _status = 'Extracting pose data...');
+      setState(() => _status = 'Extracting pose data on server...');
       await Future.delayed(const Duration(milliseconds: 800));
 
       setState(() => _status = 'Running AI analysis...');
 
-      // Use real frames if provided (mobile), otherwise generate dummy frames (web)
-      final frames = widget.poseFrames ?? _generateDummyFrames();
-
-      // Call the real API
-      final result = await ApiService().analyzePose(frames);
+      // Send the hardware video file to the server for processing
+      final result = await ApiService().uploadVideoForAnalysis(widget.videoPath);
 
       setState(() => _status = 'Generating results...');
       await Future.delayed(const Duration(milliseconds: 400));
