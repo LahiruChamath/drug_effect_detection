@@ -17,10 +17,20 @@ class MLService:
     def _load_models(self):
         """Load ML models"""
         print("Loading ML models...")
-        self.model = joblib.load(Config.MODEL_PATH)
+        self.xgb_model = joblib.load(Config.MODEL_PATH)
+        self.svm_model = joblib.load(Config.SVM_PATH)
         self.scaler = joblib.load(Config.SCALER_PATH)
         self.label_encoder = joblib.load(Config.ENCODER_PATH)
-        print(f"✅ Models loaded! Classes: {self.label_encoder.classes_}")
+        
+        try:
+            from tensorflow.keras.models import load_model
+            self.lstm_model = load_model(Config.LSTM_PATH)
+            print("✅ LSTM model loaded!")
+        except Exception as e:
+            print(f"❌ Failed to load LSTM model: {e}")
+            self.lstm_model = None
+            
+        print(f"✅ XGBoost and SVM models loaded! Classes: {self.label_encoder.classes_}")
     
     def preprocess_sequence(self, frames, target_frames=200):
         """Preprocess raw landmark data"""
@@ -136,30 +146,50 @@ class MLService:
         return np.array(features)
     
     def predict(self, frames):
-        """Full prediction pipeline"""
+        """Full prediction pipeline with Ensemble Soft Voting"""
         
-        # Preprocess
-        sequence = self.preprocess_sequence(frames)
+        # 1. Pipeline for XGBoost and SVM (200 frames -> 71 extracted features)
+        sequence_200 = self.preprocess_sequence(frames, target_frames=200)
+        features = self.extract_features(sequence_200)
+        features_scaled = self.scaler.transform(features.reshape(1, -1))
         
-        # Extract features
-        features = self.extract_features(sequence)
-        features = features.reshape(1, -1)
+        xgb_probs = self.xgb_model.predict_proba(features_scaled)[0]
+        svm_probs = self.svm_model.predict_proba(features_scaled)[0]
         
-        # Scale
-        features_scaled = self.scaler.transform(features)
+        # 2. Pipeline for LSTM (30 frames -> 66 raw unscaled [X, Y] coordinates)
+        if hasattr(self, 'lstm_model') and self.lstm_model is not None:
+            raw_data = np.array(frames)
+            # Extract only X and Y (33 joints * 2 coords = 66 features per frame)
+            raw_xy = raw_data[:, :, :2].reshape(raw_data.shape[0], 66)
+            
+            # Match train_lstm.py padding/interpolation exactly
+            if len(raw_xy) > 30:
+                indices = np.linspace(0, len(raw_xy)-1, 30, dtype=int)
+                lstm_seq = raw_xy[indices]
+            elif len(raw_xy) < 30:
+                padding = np.zeros((30 - len(raw_xy), 66), dtype=np.float32)
+                lstm_seq = np.vstack([raw_xy, padding])
+            else:
+                lstm_seq = raw_xy
+                
+            lstm_input = lstm_seq.reshape(1, 30, 66)
+            lstm_probs = self.lstm_model.predict(lstm_input, verbose=0)[0]
+            
+            # Average 3 models
+            avg_probs = (xgb_probs + svm_probs + lstm_probs) / 3.0
+        else:
+            # Fallback to 2 models if LSTM isn't loaded
+            avg_probs = (xgb_probs + svm_probs) / 2.0
+            
+        # Predict class index using averaged probabilities
+        prediction_idx = np.argmax(avg_probs)
+        class_name = self.label_encoder.inverse_transform([prediction_idx])[0]
+        confidence = float(np.max(avg_probs))
         
-        # Predict
-        prediction = self.model.predict(features_scaled)[0]
-        probabilities = self.model.predict_proba(features_scaled)[0]
-        
-        # Get class name
-        class_name = self.label_encoder.inverse_transform([prediction])[0]
-        confidence = float(np.max(probabilities))
-        
-        # All probabilities
+        # Format probabilities dict mapping
         class_probs = {
             self.label_encoder.classes_[i]: float(prob)
-            for i, prob in enumerate(probabilities)
+            for i, prob in enumerate(avg_probs)
         }
         
         return {

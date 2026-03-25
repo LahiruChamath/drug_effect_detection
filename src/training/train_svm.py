@@ -106,7 +106,7 @@ if __name__ == "__main__":
     # Define pipeline
     pipeline = Pipeline([
         ("scaler", StandardScaler()),
-        ("svm", SVC())
+        ("svm", SVC(probability=True))
     ])
 
     # Parameter grid

@@ -16,5 +16,7 @@ class Config:
     # Model paths
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     MODEL_PATH = os.path.join(BASE_DIR, 'models', 'drug_classifier_xgboost.pkl')
+    SVM_PATH = os.path.join(BASE_DIR, 'models', 'drug_classifier_svm.pkl')
+    LSTM_PATH = os.path.join(BASE_DIR, 'models', 'best_lstm_model.h5')
     SCALER_PATH = os.path.join(BASE_DIR, 'models', 'scaler.pkl')
     ENCODER_PATH = os.path.join(BASE_DIR, 'models', 'label_encoder.pkl')
