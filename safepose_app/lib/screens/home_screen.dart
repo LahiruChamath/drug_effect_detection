@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../models/user.dart';
+import '../models/scan_result.dart';
 import '../services/api_service.dart';
 import 'scan_instructions_screen.dart';
-import 'history_screen.dart';
-import 'profile_screen.dart';
+import 'results_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final User user;
@@ -16,40 +16,39 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 0;
   Map<String, dynamic>? _stats;
+  List<ScanResult> _recentScans = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadStats();
+    _loadData();
   }
 
-  Future<void> _loadStats() async {
+  Future<void> _loadData() async {
     try {
       final stats = await ApiService().getStats();
+      final scans = await ApiService().getHistory();
       if (mounted) {
         setState(() {
           _stats = stats;
+          _recentScans = scans;
           _isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
 
   int get _totalScans => _stats?['total_scans'] ?? 0;
-  
+
   Map<String, dynamic> get _byPrediction {
     final raw = _stats?['by_prediction'];
     if (raw == null) return {};
-    // json.decode returns LinkedMap<dynamic,dynamic> on web — convert explicitly
     return Map<String, dynamic>.from(raw as Map);
   }
 
@@ -59,14 +58,16 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _loadStats,
+          onRefresh: _loadData,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(24.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
+                // ==========================================
+                // HEADER (greeting + notification bell)
+                // ==========================================
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -90,12 +91,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     GestureDetector(
                       onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ProfileScreen(user: widget.user),
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('No new notifications'),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
-                        ).then((_) => _loadStats());
+                        );
                       },
                       child: Container(
                         width: 48,
@@ -105,16 +109,18 @@ class _HomeScreenState extends State<HomeScreen> {
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: const Icon(
-                          Icons.person_outline,
+                          Icons.notifications_outlined,
                           color: AppTheme.primaryColor,
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 32),
-                
-                // Stats Card
+                const SizedBox(height: 24),
+
+                // ==========================================
+                // STATS CARD (Total Scans + Normal)
+                // ==========================================
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(20),
@@ -164,9 +170,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           ],
                         ),
                 ),
-                const SizedBox(height: 32),
-                
-                // Start Scan Card
+                const SizedBox(height: 24),
+
+                // ==========================================
+                // START SCAN CARD
+                // ==========================================
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(32),
@@ -232,7 +240,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               MaterialPageRoute(
                                 builder: (_) => const ScanInstructionsScreen(),
                               ),
-                            ).then((_) => _loadStats());
+                            ).then((_) => _loadData());
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
@@ -254,11 +262,29 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                
-                // Prediction Breakdown
+
+                // ==========================================
+                // WEEKLY ACTIVITY CHART (NEW)
+                // ==========================================
+                if (!_isLoading) ...[
+                  _buildWeeklyChart(context),
+                  const SizedBox(height: 24),
+                ],
+
+                // ==========================================
+                // LAST SCAN QUICK GLANCE (NEW)
+                // ==========================================
+                if (!_isLoading && _recentScans.isNotEmpty) ...[
+                  _buildLastScanCard(context),
+                  const SizedBox(height: 24),
+                ],
+
+                // ==========================================
+                // PREDICTION BREAKDOWN (KEEP)
+                // ==========================================
                 if (!_isLoading && _byPrediction.isNotEmpty) ...[
                   Text(
-                    'Scan Results',
+                    'Prediction Breakdown',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -267,109 +293,218 @@ class _HomeScreenState extends State<HomeScreen> {
                   _buildPredictionBreakdown(),
                   const SizedBox(height: 24),
                 ],
-                
-                // Quick Actions
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildQuickAction(
-                        context,
-                        Icons.history,
-                        'History',
-                        () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const HistoryScreen()),
-                          ).then((_) => _loadStats());
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _buildQuickAction(
-                        context,
-                        Icons.help_outline,
-                        'Help',
-                        () {
-                          _showHelpDialog();
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _buildQuickAction(
-                        context,
-                        Icons.settings_outlined,
-                        'Settings',
-                        () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ProfileScreen(user: widget.user),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
         ),
       ),
-      bottomNavigationBar: Container(
+    );
+  }
+
+  // ==========================================
+  // WEEKLY ACTIVITY CHART
+  // ==========================================
+  Widget _buildWeeklyChart(BuildContext context) {
+    final now = DateTime.now();
+    final dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    // Count scans per day of this week
+    // Normalize to midnight to avoid time-of-day offset issues
+    final startOfWeekDate = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+    List<int> dayCounts = List.filled(7, 0);
+
+    for (final scan in _recentScans) {
+      if (scan.timestamp == null) continue;
+      final scanDate = DateTime(scan.timestamp!.year, scan.timestamp!.month, scan.timestamp!.day);
+      final diff = scanDate.difference(startOfWeekDate).inDays;
+      if (diff >= 0 && diff < 7) {
+        dayCounts[diff]++;
+      }
+    }
+
+    final maxCount = dayCounts.reduce((a, b) => a > b ? a : b);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.show_chart, size: 20, color: AppTheme.primaryColor),
+              const SizedBox(width: 10),
+              Text(
+                'Weekly Activity',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 120,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: List.generate(7, (i) {
+                final isToday = i == now.weekday - 1;
+                final height = maxCount > 0
+                    ? (dayCounts[i] / maxCount) * 70
+                    : 0.0;
+
+                return Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (dayCounts[i] > 0)
+                        Text(
+                          '${dayCounts[i]}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isToday
+                                ? AppTheme.primaryColor
+                                : AppTheme.textTertiary,
+                          ),
+                        ),
+                      const SizedBox(height: 4),
+                      Container(
+                        width: 24,
+                        height: height.clamp(4.0, 70.0),
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: isToday
+                              ? AppTheme.primaryColor
+                              : dayCounts[i] > 0
+                                  ? AppTheme.primaryColor.withOpacity(0.3)
+                                  : AppTheme.dividerColor,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        dayLabels[i],
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                          color: isToday
+                              ? AppTheme.primaryColor
+                              : AppTheme.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // LAST SCAN QUICK GLANCE
+  // ==========================================
+  Widget _buildLastScanCard(BuildContext context) {
+    // Sort to get latest
+    final sorted = List<ScanResult>.from(_recentScans);
+    sorted.sort((a, b) =>
+        (b.timestamp ?? DateTime.now()).compareTo(a.timestamp ?? DateTime.now()));
+    final lastScan = sorted.first;
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ResultsScreen(result: lastScan),
+          ),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -5),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: AppTheme.cardShadow,
         ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() => _currentIndex = index);
-            if (index == 1 || index == 2) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const HistoryScreen()),
-              );
-            } else if (index == 3) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ProfileScreen(user: widget.user),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: (lastScan.isNormal
+                        ? AppTheme.successColor
+                        : AppTheme.warningColor)
+                    .withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  lastScan.predictionEmoji,
+                  style: const TextStyle(fontSize: 26),
                 ),
-              );
-            }
-          },
-          type: BottomNavigationBarType.fixed,
-          selectedItemColor: AppTheme.primaryColor,
-          unselectedItemColor: AppTheme.textSecondary,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined),
-              activeIcon: Icon(Icons.home),
-              label: 'Home',
+              ),
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.analytics_outlined),
-              activeIcon: Icon(Icons.analytics),
-              label: 'Results',
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.history, size: 14, color: AppTheme.textTertiary),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Last Scan',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textTertiary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${lastScan.predictionLabel} · ${(lastScan.confidence * 100).toInt()}%',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (lastScan.timestamp != null)
+                    Text(
+                      _formatDate(lastScan.timestamp!),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textTertiary,
+                      ),
+                    ),
+                ],
+              ),
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.history_outlined),
-              activeIcon: Icon(Icons.history),
-              label: 'History',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline),
-              activeIcon: Icon(Icons.person),
-              label: 'Profile',
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryLight,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'View',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
             ),
           ],
         ),
@@ -377,6 +512,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ==========================================
+  // PREDICTION BREAKDOWN (existing, kept)
+  // ==========================================
   Widget _buildPredictionBreakdown() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -427,10 +565,46 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ==========================================
+  // HELPER WIDGETS
+  // ==========================================
+  Widget _buildStatItem(
+    BuildContext context,
+    String value,
+    String label,
+    IconData icon,
+  ) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: AppTheme.primaryColor, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              value,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: AppTheme.primaryColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppTheme.textSecondary,
+              ),
+        ),
+      ],
+    );
+  }
+
   Widget _getPredictionIcon(String prediction) {
     IconData icon;
     Color color;
-    
+
     switch (prediction.toLowerCase()) {
       case 'none':
         icon = Icons.check_circle;
@@ -452,7 +626,7 @@ class _HomeScreenState extends State<HomeScreen> {
         icon = Icons.help;
         color = AppTheme.textSecondary;
     }
-    
+
     return Container(
       width: 36,
       height: 36,
@@ -494,99 +668,21 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _showHelpDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('How to Use SafePose'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('1. Tap "Begin Scan" to start'),
-            SizedBox(height: 8),
-            Text('2. Follow the on-screen instructions'),
-            SizedBox(height: 8),
-            Text('3. Stay still for 10 seconds'),
-            SizedBox(height: 8),
-            Text('4. View your results'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Got it'),
-          ),
-        ],
-      ),
-    );
-  }
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final scanDate = DateTime(date.year, date.month, date.day);
 
-  Widget _buildStatItem(
-    BuildContext context,
-    String value,
-    String label,
-    IconData icon,
-  ) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: AppTheme.primaryColor, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: AppTheme.primaryColor,
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppTheme.textSecondary,
-              ),
-        ),
-      ],
-    );
-  }
+    String timeStr =
+        '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
 
-  Widget _buildQuickAction(
-    BuildContext context,
-    IconData icon,
-    String label,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: AppTheme.textSecondary),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ),
-    );
+    if (scanDate == today) {
+      return 'Today, $timeStr';
+    } else if (scanDate == yesterday) {
+      return 'Yesterday, $timeStr';
+    } else {
+      return '${date.day}/${date.month}/${date.year}';
+    }
   }
 }

@@ -3,7 +3,7 @@ import '../theme/app_theme.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
 import '../services/api_service.dart';
-import 'home_screen.dart';
+import 'main_shell.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -33,7 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => HomeScreen(user: user)),
+          MaterialPageRoute(builder: (_) => MainShell(user: user)),
           (route) => false,
         );
       }

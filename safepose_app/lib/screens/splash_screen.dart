@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import 'welcome_screen.dart';
-import 'home_screen.dart';
+import 'main_shell.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -54,7 +54,7 @@ class _SplashScreenState extends State<SplashScreen>
           // User is logged in, go to home
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => HomeScreen(user: user)),
+            MaterialPageRoute(builder: (_) => MainShell(user: user)),
           );
         } else {
           // Not logged in, go to welcome
