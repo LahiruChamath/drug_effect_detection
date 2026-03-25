@@ -1,13 +1,9 @@
 import 'dart:async';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:web/web.dart' as web;
-import 'dart:js_interop';
 import '../theme/app_theme.dart';
 import '../utils/constants.dart';
 import 'analyzing_screen.dart';
+import 'camera/camera_view.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -24,75 +20,16 @@ class _CameraScreenState extends State<CameraScreen> {
   Timer? _recordingTimer;
   bool _showCountdown = false;
   bool _cameraReady = false;
-  bool _cameraError = false;
-  final String _viewId = 'webcam-${DateTime.now().millisecondsSinceEpoch}';
-  web.MediaStream? _stream;
 
   @override
   void initState() {
     super.initState();
-    if (kIsWeb) {
-      _initWebCamera();
-    }
-  }
-
-  Future<void> _initWebCamera() async {
-    try {
-      // Create mirrored <video> element
-      final video = web.HTMLVideoElement()
-        ..autoplay = true
-        ..muted = true
-        ..style.width = '100%'
-        ..style.height = '100%'
-        ..style.objectFit = 'cover'
-        ..style.transform = 'scaleX(-1)';
-
-      // Register platform view
-      ui_web.platformViewRegistry.registerViewFactory(
-        _viewId,
-        (int id) => video,
-      );
-
-      // Request camera access
-      final constraints = web.MediaStreamConstraints(video: true.toJS);
-      final stream = await web.window.navigator.mediaDevices
-          .getUserMedia(constraints)
-          .toDart;
-
-      _stream = stream;
-      video.srcObject = stream;
-
-      if (mounted) {
-        setState(() {
-          _cameraReady = true;
-          _cameraError = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _cameraError = true;
-          _cameraReady = false;
-        });
-      }
-    }
-  }
-
-  void _stopStream() {
-    if (_stream != null) {
-      final tracks = _stream!.getVideoTracks().toDart;
-      for (final t in tracks) {
-        t.stop();
-      }
-      _stream = null;
-    }
   }
 
   @override
   void dispose() {
     _countdownTimer?.cancel();
     _recordingTimer?.cancel();
-    if (kIsWeb) _stopStream();
     super.dispose();
   }
 
@@ -159,12 +96,13 @@ class _CameraScreenState extends State<CameraScreen> {
         fit: StackFit.expand,
         children: [
           // ── Camera Feed ─────────────────────────────────────────
-          if (kIsWeb && _cameraReady)
-            HtmlElementView(viewType: _viewId)
-          else if (kIsWeb && _cameraError)
-            _buildErrorPlaceholder()
-          else
-            _buildLoadingPlaceholder(),
+          UniversalCameraView(
+            loadingBuilder: (ctx) => _buildLoadingPlaceholder(),
+            errorBuilder: (ctx, msg) => _buildErrorPlaceholder(msg),
+            onReady: () {
+              if (mounted) setState(() => _cameraReady = true);
+            },
+          ),
 
           // ── Overlays ─────────────────────────────────────────────
           SafeArea(
@@ -198,36 +136,36 @@ class _CameraScreenState extends State<CameraScreen> {
 
   Widget _buildLoadingPlaceholder() => Container(
         color: Colors.grey.shade900,
-        child: Center(
+        child: const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(color: AppTheme.primaryColor),
-              const SizedBox(height: 16),
+              CircularProgressIndicator(color: AppTheme.primaryColor),
+              SizedBox(height: 16),
               Text(
-                kIsWeb ? 'Starting camera...' : 'Camera Preview',
-                style: const TextStyle(color: Colors.white70, fontSize: 16),
+                'Starting camera...',
+                style: TextStyle(color: Colors.white70, fontSize: 16),
               ),
             ],
           ),
         ),
       );
 
-  Widget _buildErrorPlaceholder() => Container(
+  Widget _buildErrorPlaceholder(String msg) => Container(
         color: Colors.grey.shade900,
-        child: const Center(
+        child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.no_photography, size: 80, color: Colors.white54),
-              SizedBox(height: 16),
-              Text('Camera access denied',
+              const Icon(Icons.no_photography, size: 80, color: Colors.white54),
+              const SizedBox(height: 16),
+              const Text('Camera unavailable',
                   style: TextStyle(color: Colors.white70, fontSize: 18)),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Text(
-                'Allow camera permission in your browser\nand reload the page.',
+                msg,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white38, fontSize: 13),
+                style: const TextStyle(color: Colors.white38, fontSize: 13),
               ),
             ],
           ),
@@ -313,8 +251,8 @@ class _CameraScreenState extends State<CameraScreen> {
         child: Text(
           _isRecording
               ? 'Keep still • Stay in frame'
-              : _cameraError
-                  ? 'Camera unavailable — tap to proceed anyway'
+              : !_cameraReady
+                  ? 'Waiting for camera...'
                   : 'Press button to start recording',
           style: const TextStyle(color: Colors.white),
           textAlign: TextAlign.center,

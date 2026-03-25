@@ -36,7 +36,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
         });
       }
     } catch (e) {
-      // On error, just show empty list (no scans)
       if (mounted) {
         setState(() {
           _scans = [];
@@ -46,21 +45,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  Future<void> _deleteScan(ScanResult scan) async {
+  Future<bool> _deleteScan(ScanResult scan) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Delete Scan'),
-        content: const Text('Are you sure you want to delete this scan?'),
+        content: const Text('Are you sure you want to delete this scan result? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
-            child: const Text('Delete'),
+            child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -72,27 +72,38 @@ class _HistoryScreenState extends State<HistoryScreen> {
         _loadHistory();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Scan deleted')),
+            SnackBar(
+              content: const Text('Scan deleted successfully'),
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: AppTheme.textPrimary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
           );
         }
+        return true;
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
+            SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.errorColor),
           );
         }
+        return false;
       }
     }
+    return false;
   }
 
   List<ScanResult> get _filteredScans {
+    final sorted = List<ScanResult>.from(_scans);
+    sorted.sort((a, b) => (b.timestamp ?? DateTime.now()).compareTo(a.timestamp ?? DateTime.now()));
+    
     switch (_filter) {
       case 'normal':
-        return _scans.where((s) => s.isNormal).toList();
+        return sorted.where((s) => s.isNormal).toList();
       case 'flagged':
-        return _scans.where((s) => !s.isNormal).toList();
+        return sorted.where((s) => !s.isNormal).toList();
       default:
-        return _scans;
+        return sorted;
     }
   }
 
@@ -100,80 +111,114 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: const Text('Scan History'),
-        backgroundColor: Colors.white,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadHistory,
-          ),
+      body: CustomScrollView(
+        slivers: [
+          _buildSliverAppBar(),
+          _buildFilterSection(),
+          _buildScanList(),
         ],
       ),
-      body: Column(
-        children: [
-          // Filter Tabs
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                _buildFilterChip('All', 'all'),
-                const SizedBox(width: 8),
-                _buildFilterChip('Normal', 'normal'),
-                const SizedBox(width: 8),
-                _buildFilterChip('Flagged', 'flagged'),
-              ],
-            ),
+    );
+  }
+
+  Widget _buildSliverAppBar() {
+    return SliverAppBar(
+      expandedHeight: 120.0,
+      floating: false,
+      pinned: true,
+      elevation: 0,
+      backgroundColor: Colors.white,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: AppTheme.textPrimary),
+        onPressed: () => Navigator.pop(context),
+      ),
+      flexibleSpace: FlexibleSpaceBar(
+        titlePadding: const EdgeInsets.only(left: 60, bottom: 16),
+        title: Text(
+          'Scan History',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+              ),
+        ),
+        background: Container(color: Colors.white),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh, color: AppTheme.primaryColor),
+          onPressed: _loadHistory,
+        ),
+        const SizedBox(width: 8),
+      ],
+    );
+  }
+
+  Widget _buildFilterSection() {
+    return SliverToBoxAdapter(
+      child: Container(
+        color: Colors.white,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _buildFilterChip('All Scans', 'all'),
+              const SizedBox(width: 8),
+              _buildFilterChip('Normal', 'normal'),
+              const SizedBox(width: 8),
+              _buildFilterChip('Flagged', 'flagged'),
+            ],
           ),
-          
-          // List
-          Expanded(
-            child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      color: AppTheme.primaryColor,
-                    ),
-                  )
-                : _filteredScans.isEmpty
-                    ? _buildEmptyState()
-                    : RefreshIndicator(
-                        onRefresh: _loadHistory,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _filteredScans.length,
-                          itemBuilder: (context, index) {
-                            final scan = _filteredScans[index];
-                            return _buildScanItem(context, scan);
-                          },
-                        ),
-                      ),
-          ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScanList() {
+    if (_isLoading) {
+      return const SliverFillRemaining(
+        child: Center(
+          child: CircularProgressIndicator(color: AppTheme.primaryColor),
+        ),
+      );
+    }
+
+    if (_filteredScans.isEmpty) {
+      return SliverFillRemaining(
+        child: _buildEmptyState(),
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.all(16),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final scan = _filteredScans[index];
+            return _buildScanItem(context, scan);
+          },
+          childCount: _filteredScans.length,
+        ),
       ),
     );
   }
 
   Widget _buildEmptyState() {
     String message;
-    String subMessage;
+    IconData icon;
     
     switch (_filter) {
       case 'normal':
-        message = 'No normal scans';
-        subMessage = 'Normal scan results will appear here';
+        message = 'No normal scans found';
+        icon = Icons.check_circle_outline;
         break;
       case 'flagged':
-        message = 'No flagged scans';
-        subMessage = 'Flagged scan results will appear here';
+        message = 'No flagged scans found';
+        icon = Icons.warning_amber_rounded;
         break;
       default:
-        message = 'No scan history';
-        subMessage = 'Start a scan to see your results here';
+        message = 'Your scan history is empty';
+        icon = Icons.history;
     }
 
     return Center(
@@ -181,32 +226,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 80,
-            height: 80,
+            padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withOpacity(0.1),
+              color: Colors.white,
               shape: BoxShape.circle,
+              boxShadow: AppTheme.cardShadow,
             ),
-            child: Icon(
-              Icons.history,
-              size: 40,
-              color: AppTheme.primaryColor.withOpacity(0.5),
-            ),
+            child: Icon(icon, size: 64, color: AppTheme.primaryColor.withOpacity(0.3)),
           ),
           const SizedBox(height: 24),
           Text(
             message,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
                 ),
           ),
           const SizedBox(height: 8),
           Text(
-            subMessage,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            'Keep regular checkups for better tracking',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: AppTheme.textSecondary,
                 ),
-            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -217,20 +258,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final isSelected = _filter == value;
     
     return GestureDetector(
-      onTap: () {
-        setState(() => _filter = value);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      onTap: () => setState(() => _filter = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.primaryColor : Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(20),
+          color: isSelected ? AppTheme.primaryColor : AppTheme.backgroundColor,
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: isSelected ? [
+            BoxShadow(
+              color: AppTheme.primaryColor.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            )
+          ] : [],
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : AppTheme.textPrimary,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+            color: isSelected ? Colors.white : AppTheme.textSecondary,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
       ),
@@ -238,102 +285,129 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildScanItem(BuildContext context, ScanResult scan) {
-    return Dismissible(
-      key: Key(scan.scanId),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: AppTheme.errorColor,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Icon(Icons.delete, color: Colors.white),
-      ),
-      confirmDismiss: (direction) async {
-        await _deleteScan(scan);
-        return false;
-      },
-      child: GestureDetector(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ResultsScreen(result: scan),
-            ),
-          );
-        },
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
+    final Color statusColor = scan.isNormal ? AppTheme.successColor : AppTheme.warningColor;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Dismissible(
+        key: Key(scan.scanId),
+        direction: DismissDirection.endToStart,
+        background: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            color: AppTheme.errorColor,
+            borderRadius: BorderRadius.circular(20),
           ),
-          child: Row(
-            children: [
-              // Status Icon
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: scan.isNormal
-                      ? AppTheme.successColor.withOpacity(0.1)
-                      : AppTheme.warningColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
+          child: const Icon(Icons.delete_outline, color: Colors.white, size: 28),
+        ),
+        confirmDismiss: (_) => _deleteScan(scan),
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => ResultsScreen(result: scan)),
+            );
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
                 ),
-                child: Center(
-                  child: Text(
-                    scan.predictionEmoji,
-                    style: const TextStyle(fontSize: 24),
+              ],
+            ),
+            child: Row(
+              children: [
+                // Icon with gradient back
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        statusColor.withOpacity(0.2),
+                        statusColor.withOpacity(0.05),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      scan.predictionEmoji,
+                      style: const TextStyle(fontSize: 28),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 16),
-              
-              // Details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      scan.predictionLabel,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${(scan.confidence * 100).toInt()}% confidence',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppTheme.textSecondary,
-                          ),
-                    ),
-                    if (scan.timestamp != null)
-                      Text(
-                        _formatDate(scan.timestamp!),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.textSecondary,
+                const SizedBox(width: 16),
+                
+                // Content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            scan.predictionLabel,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: AppTheme.textPrimary,
                             ),
+                          ),
+                          Text(
+                            _formatDate(scan.timestamp ?? DateTime.now()),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textTertiary,
+                            ),
+                          ),
+                        ],
                       ),
-                  ],
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: statusColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${(scan.confidence * 100).toInt()}% Confidence',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: statusColor,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(Icons.timer_outlined, size: 14, color: AppTheme.textTertiary),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${scan.duration.toStringAsFixed(1)}s',
+                            style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              
-              // Arrow
-              const Icon(
-                Icons.chevron_right,
-                color: AppTheme.textSecondary,
-              ),
-            ],
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right_rounded, color: AppTheme.textTertiary.withOpacity(0.5)),
+              ],
+            ),
           ),
         ),
       ),
@@ -342,16 +416,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   String _formatDate(DateTime date) {
     final now = DateTime.now();
-    final diff = now.difference(date);
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final scanDate = DateTime(date.year, date.month, date.day);
 
-    if (diff.inDays == 0) {
-      return 'Today, ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
-    } else if (diff.inDays == 1) {
-      return 'Yesterday';
-    } else if (diff.inDays < 7) {
-      return '${diff.inDays} days ago';
+    String timeStr = '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+
+    if (scanDate == today) {
+      return 'Today, $timeStr';
+    } else if (scanDate == yesterday) {
+      return 'Yesterday, $timeStr';
+    } else if (now.difference(date).inDays < 7) {
+      final List<String> days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return '${days[date.weekday - 1]}, $timeStr';
     } else {
       return '${date.day}/${date.month}/${date.year}';
     }
   }
 }
+
