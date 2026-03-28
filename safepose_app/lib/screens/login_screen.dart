@@ -3,6 +3,7 @@ import '../theme/app_theme.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
 import '../services/api_service.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'main_shell.dart';
 import 'signup_screen.dart';
 
@@ -18,6 +19,55 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    serverClientId: '333625476432-na4lks9opog2ss8a1kseh7vk9hb6293d.apps.googleusercontent.com',
+    scopes: [
+      'email',
+      'https://www.googleapis.com/auth/userinfo.profile',
+    ],
+  );
+
+  Future<void> _handleGoogleSignIn() async {
+    try {
+      setState(() => _isLoading = true);
+      
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final String? idToken = googleAuth.idToken;
+
+      if (idToken == null) {
+        throw Exception('Failed to get ID Token from Google');
+      }
+
+      final user = await ApiService().loginWithGoogle(idToken);
+
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => MainShell(user: user)),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Google Sign-In failed: ${e.toString()}'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
@@ -163,7 +213,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Social Login
                 Row(
                   children: [
-                    Expanded(child: _buildSocialButton('Google', Icons.g_mobiledata)),
+                    Expanded(child: _buildSocialButton('Google', Icons.g_mobiledata, onTap: _handleGoogleSignIn)),
                     const SizedBox(width: 16),
                     Expanded(child: _buildSocialButton('Apple', Icons.apple)),
                   ],
@@ -199,7 +249,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildSocialButton(String label, IconData icon) {
+  Widget _buildSocialButton(String label, IconData icon, {VoidCallback? onTap}) {
     return Container(
       height: 56,
       decoration: BoxDecoration(
@@ -207,11 +257,11 @@ class _LoginScreenState extends State<LoginScreen> {
         borderRadius: BorderRadius.circular(14),
       ),
       child: TextButton.icon(
-        onPressed: () {},
+        onPressed: onTap,
         icon: Icon(icon, color: AppTheme.textPrimary, size: 24),
         label: Text(
           label,
-          style: TextStyle(color: AppTheme.textPrimary),
+          style: const TextStyle(color: AppTheme.textPrimary),
         ),
       ),
     );

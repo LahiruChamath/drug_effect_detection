@@ -20,3 +20,6 @@ class Config:
     LSTM_PATH = os.path.join(BASE_DIR, 'models', 'best_lstm_model.h5')
     SCALER_PATH = os.path.join(BASE_DIR, 'models', 'scaler.pkl')
     ENCODER_PATH = os.path.join(BASE_DIR, 'models', 'label_encoder.pkl')
+    
+    # Google Auth
+    GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID') or '333625476432-na4lks9opog2ss8a1kseh7vk9hb6293d.apps.googleusercontent.com'

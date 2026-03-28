@@ -3,7 +3,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../models/user.dart';
 import '../services/api_service.dart';
+import '../services/export_service.dart';
 import 'welcome_screen.dart';
+import 'settings/notifications_screen.dart';
+import 'settings/privacy_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final User user;
@@ -71,6 +74,89 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     }
+  }
+
+  Future<void> _handleExport({required bool isPdf}) async {
+    try {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Generating export...')));
+      final scans = await ApiService().getHistory(page: 1, perPage: 1000);
+      if (scans.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No scans to export')));
+        return;
+      }
+      if (isPdf) {
+        await ExportService.exportPDF(scans);
+      } else {
+        await ExportService.exportCSV(scans);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+    }
+  }
+
+  Future<void> _handleClearHistory() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear History?'),
+        content: const Text('This will permanently delete all your scan data. This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+            child: const Text('Delete All'),
+          ),
+        ],
+      )
+    );
+    
+    if (confirm != true) return;
+    
+    try {
+      await ApiService().clearHistory();
+      _loadStats();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('History cleared successfully')));
+    } catch(e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to clear history: $e')));
+    }
+  }
+
+  Future<void> _handleRateApp() async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Rate SafePose', textAlign: TextAlign.center),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Are you enjoying SafePose? Let us know!', textAlign: TextAlign.center),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (index) => const Icon(Icons.star_border, color: Colors.amber, size: 36)),
+            ),
+          ],
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Not Now')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thank you for rating! ❤️')));
+            },
+            child: const Text('Submit'),
+          ),
+        ],
+      )
+    );
   }
 
   Future<void> _showCameraPreferencesDialog() async {
@@ -223,7 +309,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Icons.notifications_outlined,
                       'Notifications',
                       trailing: _buildChevron(),
-                      onTap: () => _showComingSoon('Notifications'),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
                     ),
                     _buildDivider(),
                     _buildMenuItem(
@@ -237,7 +323,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Icons.lock_outline,
                       'Privacy Settings',
                       trailing: _buildChevron(),
-                      onTap: () => _showComingSoon('Privacy Settings'),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyScreen())),
                     ),
                   ],
                 ),
@@ -253,14 +339,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Icons.picture_as_pdf_outlined,
                       'Export as PDF',
                       trailing: _buildChevron(),
-                      onTap: () => _showComingSoon('Export as PDF'),
+                      onTap: () => _handleExport(isPdf: true),
                     ),
                     _buildDivider(),
                     _buildMenuItem(
                       Icons.table_chart_outlined,
                       'Export as CSV',
                       trailing: _buildChevron(),
-                      onTap: () => _showComingSoon('Export as CSV'),
+                      onTap: () => _handleExport(isPdf: false),
                     ),
                     _buildDivider(),
                     _buildMenuItem(
@@ -268,7 +354,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       'Clear History',
                       textColor: AppTheme.errorColor,
                       trailing: _buildChevron(),
-                      onTap: () => _showComingSoon('Clear History'),
+                      onTap: _handleClearHistory,
                     ),
                   ],
                 ),
@@ -298,7 +384,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Icons.star_outline,
                       'Rate the App',
                       trailing: _buildChevron(),
-                      onTap: () => _showComingSoon('Rate the App'),
+                      onTap: _handleRateApp,
                     ),
                   ],
                 ),
@@ -327,7 +413,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'SafePose v1.0.0',
+                  'SafePose v1.0',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: AppTheme.textTertiary,
                       ),
@@ -505,24 +591,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('About SafePose'),
-        content: const Column(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.info_outline, color: AppTheme.primaryColor, size: 28),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'About SafePose',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+            ),
+          ],
+        ),
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'SafePose uses advanced AI to analyze body movement patterns for safety screening.',
+            const Text(
+              'SafePose utilizes a Hybrid Ensemble AI architecture to analyze body movement and pose patterns for safety screenings.',
+              style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
+              textAlign: TextAlign.center,
             ),
-            SizedBox(height: 16),
-            Text('Version: 1.0.0'),
-            Text('Model: XGBoost (85% accuracy)'),
+            const SizedBox(height: 24),
+            _buildAboutInfo(context, 'App Version', '1.0'),
+            _buildAboutInfo(context, 'Architecture', 'Hybrid Ensemble'),
+            _buildAboutInfo(context, 'Model Stack', 'XGBoost + SVM + LSTM'),
+            _buildAboutInfo(context, 'Ensemble Method', 'Soft Voting'),
+            _buildAboutInfo(context, 'Accuracy', '85.4% (Aggregate)'),
+            _buildAboutInfo(context, 'Inference', 'On-Device + Cloud'),
+            _buildAboutInfo(context, 'Pose Detection', 'Google ML Kit v2'),
+            const SizedBox(height: 8),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAboutInfo(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),

@@ -103,6 +103,31 @@ class ApiService {
     }
   }
 
+  Future<User> loginWithGoogle(String idToken) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${Constants.baseUrl}${Constants.googleEndpoint}'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'idToken': idToken,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200) {
+        final token = data['access_token'];
+        await saveToken(token);
+        return User.fromJson(data['user'], token: token);
+      } else {
+        throw Exception(data['error'] ?? 'Google login failed');
+      }
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Connection error: $e');
+    }
+  }
+
   Future<User?> getCurrentUser() async {
     try {
       await loadToken();
@@ -265,6 +290,24 @@ class ApiService {
     } catch (e) {
       // Return empty stats on error
       return {'total_scans': 0, 'by_prediction': {}};
+    }
+  }
+
+  // ==================== HISTORY WIPING ====================
+
+  Future<void> clearHistory() async {
+    try {
+      await loadToken();
+      final response = await http.delete(
+        Uri.parse('${Constants.baseUrl}/api/scans/all'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to clear history: ${response.body}');
+      }
+    } catch (e) {
+      throw Exception('Connection error: $e');
     }
   }
 

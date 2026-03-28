@@ -3,7 +3,9 @@ import '../theme/app_theme.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
 import '../services/api_service.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'login_screen.dart';
+import 'main_shell.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -20,6 +22,55 @@ class _SignupScreenState extends State<SignupScreen> {
   final _confirmPasswordController = TextEditingController();
   bool _agreeToTerms = false;
   bool _isLoading = false;
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    serverClientId: '333625476432-na4lks9opog2ss8a1kseh7vk9hb6293d.apps.googleusercontent.com',
+    scopes: [
+      'email',
+      'https://www.googleapis.com/auth/userinfo.profile',
+    ],
+  );
+
+  Future<void> _handleGoogleSignIn() async {
+    try {
+      setState(() => _isLoading = true);
+      
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final String? idToken = googleAuth.idToken;
+
+      if (idToken == null) {
+        throw Exception('Failed to get ID Token from Google');
+      }
+
+      final user = await ApiService().loginWithGoogle(idToken);
+
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => MainShell(user: user)),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Google Sign-In failed: ${e.toString()}'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   Future<void> _signup() async {
     if (!_formKey.currentState!.validate()) return;
@@ -236,8 +287,8 @@ class _SignupScreenState extends State<SignupScreen> {
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () {},
-                        icon: const Text('G', style: TextStyle(fontSize: 18)),
+                        onPressed: _handleGoogleSignIn,
+                        icon: const Icon(Icons.g_mobiledata, size: 28),
                         label: const Text('Google'),
                       ),
                     ),

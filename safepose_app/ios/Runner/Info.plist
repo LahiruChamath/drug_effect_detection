@@ -51,5 +51,28 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.333625476432-vbl45ecp8onsh91sdbqukdqhnqvf02d0</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.lahiruchamath.safeposeApp</string>
+			</array>
+		</dict>
+	</array>
+	<key>GIDClientID</key>
+	<string>333625476432-vbl45ecp8onsh91sdbqukdqhnqvf02d0.apps.googleusercontent.com</string>
+	<key>GIDServerClientID</key>
+	<string>333625476432-na4lks9opog2ss8a1kseh7vk9hb6293d.apps.googleusercontent.com</string>
 </dict>
 </plist>

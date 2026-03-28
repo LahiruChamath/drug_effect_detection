@@ -3,6 +3,7 @@ import '../theme/app_theme.dart';
 import '../models/scan_result.dart';
 import '../widgets/custom_button.dart';
 import 'camera_screen.dart';
+import '../services/export_service.dart';
 
 class ResultsScreen extends StatelessWidget {
   final ScanResult result;
@@ -1086,10 +1087,12 @@ class ResultsScreen extends StatelessWidget {
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: 20),
-              _buildShareOption(context, Icons.picture_as_pdf, 'Export as PDF'),
-              _buildShareOption(context, Icons.table_chart, 'Export as CSV'),
-              _buildShareOption(context, Icons.copy, 'Copy Summary'),
-              _buildShareOption(context, Icons.share, 'Share via...'),
+              _buildShareOption(context, Icons.picture_as_pdf, 'Export as PDF', () => ExportService.exportPDF([result])),
+              _buildShareOption(context, Icons.table_chart, 'Export as CSV', () => ExportService.exportCSV([result])),
+              _buildShareOption(context, Icons.copy, 'Copy Summary', () {
+                ExportService.copySummary(result);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
+              }),
               const SizedBox(height: 10),
             ],
           ),
@@ -1098,7 +1101,7 @@ class ResultsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildShareOption(BuildContext context, IconData icon, String label) {
+  Widget _buildShareOption(BuildContext context, IconData icon, String label, VoidCallback onTap) {
     return ListTile(
       leading: Container(
         width: 40,
@@ -1113,9 +1116,7 @@ class ResultsScreen extends StatelessWidget {
       trailing: const Icon(Icons.chevron_right, color: AppTheme.textTertiary),
       onTap: () {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$label - Coming soon!')),
-        );
+        onTap();
       },
     );
   }

@@ -10,6 +10,7 @@ class Constants {
   // API Endpoints
   static const String loginEndpoint = "/api/auth/login";
   static const String registerEndpoint = "/api/auth/register";
+  static const String googleEndpoint = "/api/auth/google";
   static const String meEndpoint = "/api/auth/me";
   static const String predictEndpoint = "/api/predict";
   static const String analyzeVideoEndpoint = "/api/analyze_video";

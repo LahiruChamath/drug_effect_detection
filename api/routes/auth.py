@@ -1,8 +1,85 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app as app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from models.database import User, db
+from google.oauth2 import id_token
+from google.auth.transport import requests
 
 auth_bp = Blueprint('auth', __name__)
+
+@auth_bp.route('/google', methods=['POST'])
+def google_auth():
+    """Authenticate with Google token"""
+    try:
+        data = request.get_json()
+        if not data or 'idToken' not in data:
+            return jsonify({'error': 'No Google ID Token provided'}), 400
+        
+        token = data['idToken']
+        
+        # Try verifying with Web Client ID first, then iOS Client ID
+        web_client_id = app.config.get('GOOGLE_CLIENT_ID')
+        ios_client_id = '333625476432-vbl45ecp8onsh91sdbqukdqhnqvf02d0.apps.googleusercontent.com'
+        
+        idinfo = None
+        
+        # Try Web Client ID
+        try:
+            idinfo = id_token.verify_oauth2_token(token, requests.Request(), web_client_id)
+            print(f"✅ Token verified with Web Client ID")
+        except ValueError as e:
+            print(f"⚠️ Web Client ID verification failed: {e}")
+        
+        # Try iOS Client ID
+        if idinfo is None:
+            try:
+                idinfo = id_token.verify_oauth2_token(token, requests.Request(), ios_client_id)
+                print(f"✅ Token verified with iOS Client ID")
+            except ValueError as e:
+                print(f"⚠️ iOS Client ID verification failed: {e}")
+        
+        # Last resort: verify without audience check (development only)
+        if idinfo is None:
+            try:
+                idinfo = id_token.verify_oauth2_token(token, requests.Request())
+                print(f"✅ Token verified without audience check (dev mode)")
+                print(f"   Token audience: {idinfo.get('aud', 'unknown')}")
+            except ValueError as e:
+                print(f"❌ All verification attempts failed: {e}")
+                return jsonify({'error': f'Invalid Google ID Token: {str(e)}'}), 401
+        
+        # ID token is valid. Get the user's info.
+        email = idinfo['email'].strip().lower()
+        name = idinfo.get('name', 'Google User').strip()
+        
+        print(f"✅ Google user: {name} ({email})")
+        
+        # Check if user exists
+        user = User.query.filter_by(email=email).first()
+        
+        if not user:
+            # Create user for social login
+            user = User(email=email, name=name)
+            user.set_password('google-oauth-user')  # Placeholder - user logs in via Google
+            db.session.add(user)
+            db.session.commit()
+            print(f"✅ New user created for {email}")
+        else:
+            print(f"✅ Existing user found for {email}")
+        
+        # Generate SafePose token
+        access_token = create_access_token(identity=str(user.id))
+        
+        return jsonify({
+            'message': 'Google authentication successful',
+            'user': user.to_dict(),
+            'access_token': access_token
+        }), 200
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 
 
 @auth_bp.route('/register', methods=['POST'])

@@ -56,6 +56,24 @@ def get_scan(scan_id):
         return jsonify({'error': str(e)}), 500
 
 
+@history_bp.route('/scans/all', methods=['DELETE'])
+@jwt_required()
+def delete_all_scans():
+    """Delete all scans for current user"""
+    try:
+        user_id = int(get_jwt_identity())
+        
+        # Delete all
+        Scan.query.filter_by(user_id=user_id).delete()
+        db.session.commit()
+        
+        return jsonify({'message': 'All history cleared'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
 @history_bp.route('/scans/<int:scan_id>', methods=['DELETE'])
 @jwt_required()
 def delete_scan(scan_id):
