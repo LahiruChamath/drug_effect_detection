@@ -18,16 +18,21 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
 
+  final _homeKey = GlobalKey<HomeScreenState>();
+  final _insightsKey = GlobalKey<InsightsScreenState>();
+  final _historyKey = GlobalKey<HistoryScreenState>();
+  final _profileKey = GlobalKey<ProfileScreenState>();
+
   late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
     _screens = [
-      HomeScreen(user: widget.user),
-      const InsightsScreen(),
-      const HistoryScreen(),
-      ProfileScreen(user: widget.user),
+      HomeScreen(key: _homeKey, user: widget.user),
+      InsightsScreen(key: _insightsKey),
+      HistoryScreen(key: _historyKey),
+      ProfileScreen(key: _profileKey, user: widget.user),
     ];
   }
 
@@ -53,6 +58,21 @@ class _MainShellState extends State<MainShell> {
           currentIndex: _currentIndex,
           onTap: (index) {
             setState(() => _currentIndex = index);
+            // Refresh data when switching to a tab
+            switch (index) {
+              case 0:
+                _homeKey.currentState?.refreshData();
+                break;
+              case 1:
+                _insightsKey.currentState?.refreshData();
+                break;
+              case 2:
+                _historyKey.currentState?.refreshData();
+                break;
+              case 3:
+                _profileKey.currentState?.refreshData();
+                break;
+            }
           },
           type: BottomNavigationBarType.fixed,
           selectedItemColor: AppTheme.primaryColor,

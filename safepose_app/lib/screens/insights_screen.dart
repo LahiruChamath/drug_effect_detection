@@ -8,10 +8,10 @@ class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
 
   @override
-  State<InsightsScreen> createState() => _InsightsScreenState();
+  State<InsightsScreen> createState() => InsightsScreenState();
 }
 
-class _InsightsScreenState extends State<InsightsScreen> {
+class InsightsScreenState extends State<InsightsScreen> {
   Map<String, dynamic>? _stats;
   List<ScanResult> _scans = [];
   bool _isLoading = true;
@@ -21,6 +21,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
     super.initState();
     _loadData();
   }
+
+  void refreshData() => _loadData();
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);

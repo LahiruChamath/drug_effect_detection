@@ -8,10 +8,10 @@ class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
   @override
-  State<HistoryScreen> createState() => _HistoryScreenState();
+  State<HistoryScreen> createState() => HistoryScreenState();
 }
 
-class _HistoryScreenState extends State<HistoryScreen> {
+class HistoryScreenState extends State<HistoryScreen> {
   List<ScanResult> _scans = [];
   bool _isLoading = true;
   String _filter = 'all';
@@ -21,6 +21,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     super.initState();
     _loadHistory();
   }
+
+  void refreshData() => _loadHistory();
 
   Future<void> _loadHistory() async {
     setState(() => _isLoading = true);

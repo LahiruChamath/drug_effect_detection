@@ -12,10 +12,10 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.user});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? _stats;
   List<ScanResult> _recentScans = [];
   bool _isLoading = true;
@@ -25,6 +25,8 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadData();
   }
+
+  void refreshData() => _loadData();
 
   Future<void> _loadData() async {
     try {

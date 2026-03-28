@@ -14,10 +14,10 @@ class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.user});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  State<ProfileScreen> createState() => ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic>? _stats;
   bool _isLoading = true;
 
@@ -26,6 +26,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     _loadStats();
   }
+
+  void refreshData() => _loadStats();
 
   Future<void> _loadStats() async {
     try {
