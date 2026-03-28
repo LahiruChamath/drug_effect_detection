@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
 import '../models/scan_result.dart';
 import '../models/user.dart';
+import '../models/app_notification.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -352,6 +353,60 @@ class ApiService {
       return response.statusCode == 200;
     } catch (e) {
       return false;
+    }
+  }
+
+  // ==================== NOTIFICATIONS ====================
+
+  Future<Map<String, dynamic>> getNotifications() async {
+    try {
+      await loadToken();
+      
+      final response = await http.get(
+        Uri.parse('${Constants.baseUrl}/api/notifications'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final unreadCount = data['unread_count'] as int;
+        final notifsList = data['notifications'] as List;
+        
+        return {
+          'unread_count': unreadCount,
+          'notifications': notifsList.map((n) => AppNotification.fromJson(Map<String, dynamic>.from(n as Map))).toList(),
+        };
+      } else {
+        return {'unread_count': 0, 'notifications': <AppNotification>[]};
+      }
+    } catch (e) {
+      return {'unread_count': 0, 'notifications': <AppNotification>[]};
+    }
+  }
+
+  Future<void> markNotificationsRead(List<int> ids) async {
+    try {
+      await _ensureToken();
+      await http.post(
+        Uri.parse('${Constants.baseUrl}/api/notifications/read'),
+        headers: _headers,
+        body: json.encode({'notification_ids': ids}),
+      ).timeout(const Duration(seconds: 10));
+    } catch (e) {
+      print('Failed to mark read: $e');
+    }
+  }
+  
+  Future<void> logExport(String exportType) async {
+    try {
+      await _ensureToken();
+      await http.post(
+        Uri.parse('${Constants.baseUrl}/api/log_export'),
+        headers: _headers,
+        body: json.encode({'export_type': exportType}),
+      );
+    } catch (e) {
+      print('Failed to log export: $e');
     }
   }
 }

@@ -6,7 +6,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 import traceback
 from services.ml_service import ml_service
 from services.pose_extractor import PoseExtractor
-from utils.notifications import send_push_notification, send_scan_result_email
+from utils.notifications import create_in_app_notification
 from models.database import User, Scan, db
 
 predict_bp = Blueprint('predict', __name__)
@@ -51,17 +51,13 @@ def predict():
         db.session.commit()
         
         # Send notifications
-        user = User.query.get(user_id)
-        if user:
-            # Push
-            send_push_notification(
-                user, 
-                "Scan Completed", 
-                f"Result: {scan.prediction.capitalize()} ({int(scan.confidence * 100)}% Confidence)",
-                data={"scan_id": str(scan.id)}
+        if user_id:
+            create_in_app_notification(
+                user_id=user_id,
+                title="Scan Completed",
+                message=f"Result: {scan.prediction.capitalize()} ({int(scan.confidence * 100)}% Confidence)",
+                type="scan"
             )
-            # Email
-            send_scan_result_email(user, scan)
         
         return jsonify({
             'scan_id': scan.id,
@@ -130,17 +126,13 @@ def analyze_video():
         db.session.commit()
         
         # Send notifications
-        user = User.query.get(user_id)
-        if user:
-            # Push
-            send_push_notification(
-                user, 
-                "Video Analysis Completed", 
-                f"Result: {scan.prediction.capitalize()} ({int(scan.confidence * 100)}% Confidence)",
-                data={"scan_id": str(scan.id)}
+        if user_id:
+            create_in_app_notification(
+                user_id=user_id,
+                title="Video Analysis Completed",
+                message=f"Result: {scan.prediction.capitalize()} ({int(scan.confidence * 100)}% Confidence)",
+                type="scan"
             )
-            # Email
-            send_scan_result_email(user, scan)
         
         return jsonify({
             'scan_id': scan.id,

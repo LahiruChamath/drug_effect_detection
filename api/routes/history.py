@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models.database import Scan, db
+from utils.notifications import create_in_app_notification
 
 history_bp = Blueprint('history', __name__)
 
@@ -65,6 +66,14 @@ def delete_all_scans():
         
         # Delete all
         Scan.query.filter_by(user_id=user_id).delete()
+        
+        create_in_app_notification(
+            user_id=user_id,
+            title="History Cleared",
+            message="You have permanently deleted all your previously saved scan results.",
+            type="system"
+        )
+        
         db.session.commit()
         
         return jsonify({'message': 'All history cleared'}), 200
@@ -87,6 +96,14 @@ def delete_scan(scan_id):
             return jsonify({'error': 'Scan not found'}), 404
         
         db.session.delete(scan)
+        
+        create_in_app_notification(
+            user_id=user_id,
+            title="Scan Deleted",
+            message=f"You deleted a scan result from {scan.created_at.strftime('%B %d, %Y')}.",
+            type="system"
+        )
+        
         db.session.commit()
         
         return jsonify({'message': 'Scan deleted'}), 200

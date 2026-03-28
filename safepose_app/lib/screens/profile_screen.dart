@@ -93,6 +93,7 @@ class ProfileScreenState extends State<ProfileScreen> {
       } else {
         await ExportService.exportCSV(scans);
       }
+      await ApiService().logExport(isPdf ? 'pdf' : 'csv');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e')));

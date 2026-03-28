@@ -5,6 +5,7 @@ import '../models/scan_result.dart';
 import '../services/api_service.dart';
 import 'scan_instructions_screen.dart';
 import 'results_screen.dart';
+import 'settings/notifications_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final User user;
@@ -19,6 +20,7 @@ class HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? _stats;
   List<ScanResult> _recentScans = [];
   bool _isLoading = true;
+  int _unreadCount = 0;
 
   @override
   void initState() {
@@ -32,10 +34,13 @@ class HomeScreenState extends State<HomeScreen> {
     try {
       final stats = await ApiService().getStats();
       final scans = await ApiService().getHistory();
+      final notifications = await ApiService().getNotifications();
+      
       if (mounted) {
         setState(() {
           _stats = stats;
           _recentScans = scans;
+          _unreadCount = notifications['unread_count'] ?? 0;
           _isLoading = false;
         });
       }
@@ -93,27 +98,39 @@ class HomeScreenState extends State<HomeScreen> {
                     ),
                     GestureDetector(
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text('No new notifications'),
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                        ).then((_) => _loadData());
+                      },
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Icon(
+                              Icons.notifications_outlined,
+                              color: AppTheme.primaryColor,
                             ),
                           ),
-                        );
-                      },
-                      child: Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: const Icon(
-                          Icons.notifications_outlined,
-                          color: AppTheme.primaryColor,
-                        ),
+                          if (_unreadCount > 0)
+                            Positioned(
+                              right: 12,
+                              top: 12,
+                              child: Container(
+                                width: 10,
+                                height: 10,
+                                decoration: const BoxDecoration(
+                                  color: AppTheme.errorColor,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ],

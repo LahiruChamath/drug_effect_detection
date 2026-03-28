@@ -8,6 +8,7 @@ from models import db
 from routes.auth import auth_bp
 from routes.predict import predict_bp
 from routes.history import history_bp
+from routes.notifications import notifications_bp
 
 from flask_mail import Mail
 import firebase_admin
@@ -44,6 +45,7 @@ def create_app():
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(predict_bp, url_prefix='/api')
     app.register_blueprint(history_bp, url_prefix='/api')
+    app.register_blueprint(notifications_bp, url_prefix='/api')
     
     # Health check
     @app.route('/api/health', methods=['GET'])
