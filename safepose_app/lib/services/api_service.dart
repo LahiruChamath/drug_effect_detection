@@ -154,6 +154,36 @@ class ApiService {
     await clearToken();
   }
 
+  Future<void> updateSettings({
+    String? fcmToken,
+    bool? pushEnabled,
+    bool? emailEnabled,
+  }) async {
+    try {
+      await _ensureToken();
+      if (_token == null) return;
+
+      final body = {};
+      if (fcmToken != null) body['fcm_token'] = fcmToken;
+      if (pushEnabled != null) body['push_enabled'] = pushEnabled;
+      if (emailEnabled != null) body['email_enabled'] = emailEnabled;
+
+      if (body.isEmpty) return;
+
+      final response = await http.post(
+        Uri.parse('${Constants.baseUrl}/api/auth/settings'),
+        headers: _headers,
+        body: json.encode(body),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        print('Failed to update settings: ${response.body}');
+      }
+    } catch (e) {
+      print('Error updating settings: $e');
+    }
+  }
+
   // ==================== SCAN ====================
 
   Future<ScanResult> analyzePose(List<List<List<double>>> frames) async {

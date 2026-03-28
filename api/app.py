@@ -1,3 +1,4 @@
+import os
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -7,6 +8,12 @@ from models import db
 from routes.auth import auth_bp
 from routes.predict import predict_bp
 from routes.history import history_bp
+
+from flask_mail import Mail
+import firebase_admin
+from firebase_admin import credentials
+
+mail = Mail()
 
 
 def create_app():
@@ -19,6 +26,19 @@ def create_app():
     # Initialize extensions
     db.init_app(app)
     jwt = JWTManager(app)
+    mail.init_app(app)
+    
+    # Initialize Firebase Admin
+    try:
+        cred_path = app.config['FIREBASE_SERVICE_ACCOUNT_PATH']
+        if os.path.exists(cred_path):
+            cred = credentials.Certificate(cred_path)
+            firebase_admin.initialize_app(cred)
+            print("🔥 Firebase Admin initialized!")
+        else:
+            print(f"⚠️ Warning: Firebase service account not found at {cred_path}. Push notifications will be disabled.")
+    except Exception as e:
+        print(f"❌ Error initializing Firebase: {e}")
     
     # Register blueprints
     app.register_blueprint(auth_bp, url_prefix='/api/auth')

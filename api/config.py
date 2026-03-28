@@ -23,3 +23,14 @@ class Config:
     
     # Google Auth
     GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID') or '333625476432-na4lks9opog2ss8a1kseh7vk9hb6293d.apps.googleusercontent.com'
+    
+    # Email (Gmail)
+    MAIL_SERVER = 'smtp.gmail.com'
+    MAIL_PORT = 587
+    MAIL_USE_TLS = True
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME') or 'lahiru8336@gmail.com'
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD') or 'tifbgkjkzcloftbm'
+    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER') or 'lahiru8336@gmail.com'
+    
+    # Firebase
+    FIREBASE_SERVICE_ACCOUNT_PATH = os.environ.get('FIREBASE_SERVICE_ACCOUNT_PATH') or 'api/firebase-service-account.json'

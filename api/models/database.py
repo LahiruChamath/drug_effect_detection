@@ -13,6 +13,11 @@ class User(db.Model):
     name = db.Column(db.String(100), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Notification settings
+    fcm_token = db.Column(db.String(255), nullable=True)
+    push_enabled = db.Column(db.Boolean, default=True)
+    email_enabled = db.Column(db.Boolean, default=False)
+    
     # Relationship with scans
     scans = db.relationship('Scan', backref='user', lazy=True)
     
@@ -36,6 +41,9 @@ class User(db.Model):
             'id': self.id,
             'email': self.email,
             'name': self.name,
+            'fcm_token': self.fcm_token,
+            'push_enabled': self.push_enabled,
+            'email_enabled': self.email_enabled,
             'created_at': self.created_at.isoformat()
         }
 

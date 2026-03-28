@@ -3,9 +3,11 @@ import uuid
 from werkzeug.utils import secure_filename
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models.database import Scan, db
+import traceback
 from services.ml_service import ml_service
 from services.pose_extractor import PoseExtractor
+from utils.notifications import send_push_notification, send_scan_result_email
+from models.database import User, Scan, db
 
 predict_bp = Blueprint('predict', __name__)
 
@@ -48,6 +50,19 @@ def predict():
         db.session.add(scan)
         db.session.commit()
         
+        # Send notifications
+        user = User.query.get(user_id)
+        if user:
+            # Push
+            send_push_notification(
+                user, 
+                "Scan Completed", 
+                f"Result: {scan.prediction.capitalize()} ({int(scan.confidence * 100)}% Confidence)",
+                data={"scan_id": str(scan.id)}
+            )
+            # Email
+            send_scan_result_email(user, scan)
+        
         return jsonify({
             'scan_id': scan.id,
             'prediction': result['prediction'],
@@ -58,6 +73,7 @@ def predict():
         
     except Exception as e:
         db.session.rollback()
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @predict_bp.route('/analyze_video', methods=['POST'])
@@ -113,6 +129,19 @@ def analyze_video():
         db.session.add(scan)
         db.session.commit()
         
+        # Send notifications
+        user = User.query.get(user_id)
+        if user:
+            # Push
+            send_push_notification(
+                user, 
+                "Video Analysis Completed", 
+                f"Result: {scan.prediction.capitalize()} ({int(scan.confidence * 100)}% Confidence)",
+                data={"scan_id": str(scan.id)}
+            )
+            # Email
+            send_scan_result_email(user, scan)
+        
         return jsonify({
             'scan_id': scan.id,
             'prediction': result['prediction'],
@@ -123,6 +152,7 @@ def analyze_video():
         
     except Exception as e:
         db.session.rollback()
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
         # Clean up temp file

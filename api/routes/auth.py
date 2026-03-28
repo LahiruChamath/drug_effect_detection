@@ -208,3 +208,38 @@ def update_profile():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/settings', methods=['POST'])
+@jwt_required()
+def update_settings():
+    """Update notification settings and FCM token"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        data = request.get_json()
+        
+        if 'fcm_token' in data:
+            user.fcm_token = data['fcm_token'].strip()
+            print(f"📱 FCM Token updated for {user.email}")
+            
+        if 'push_enabled' in data:
+            user.push_enabled = bool(data['push_enabled'])
+            
+        if 'email_enabled' in data:
+            user.email_enabled = bool(data['email_enabled'])
+            
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Settings updated',
+            'user': user.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500

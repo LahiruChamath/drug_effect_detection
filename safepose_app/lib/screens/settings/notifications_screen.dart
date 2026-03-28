@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
+import '../../services/api_service.dart';
+import '../../models/user.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -12,6 +14,8 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _pushEnabled = true;
   bool _emailEnabled = false;
+  bool _isLoading = true;
+  final ApiService _apiService = ApiService();
 
   @override
   void initState() {
@@ -20,16 +24,44 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _pushEnabled = prefs.getBool('notifications_push') ?? true;
-      _emailEnabled = prefs.getBool('notifications_email') ?? false;
-    });
+    setState(() => _isLoading = true);
+    try {
+      final user = await _apiService.getCurrentUser();
+      if (user != null) {
+        setState(() {
+          _pushEnabled = user.pushEnabled;
+          _emailEnabled = user.emailEnabled;
+        });
+      } else {
+        // Fallback to local if offline or not logged in
+        final prefs = await SharedPreferences.getInstance();
+        setState(() {
+          _pushEnabled = prefs.getBool('notifications_push') ?? true;
+          _emailEnabled = prefs.getBool('notifications_email') ?? false;
+        });
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
-  Future<void> _saveSettings(String key, bool value) async {
+  Future<void> _updateSettings({bool? push, bool? email}) async {
+    // 1. Update UI and Local Storage immediately for responsiveness
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, value);
+    if (push != null) {
+      setState(() => _pushEnabled = push);
+      await prefs.setBool('notifications_push', push);
+    }
+    if (email != null) {
+      setState(() => _emailEnabled = email);
+      await prefs.setBool('notifications_email', email);
+    }
+
+    // 2. Sync with Backend
+    await _apiService.updateSettings(
+      pushEnabled: push,
+      emailEnabled: email,
+    );
   }
 
   @override
@@ -42,25 +74,31 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: AppTheme.textPrimary),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const Text(
-            'Manage how SafePose alerts you about your daily scans, analytical models, and account activity.',
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
-          ),
-          const SizedBox(height: 24),
-          _buildSwitch('Allow Push Notifications', 'Get instant alerts on your device', _pushEnabled, (val) {
-            setState(() => _pushEnabled = val);
-            _saveSettings('notifications_push', val);
-          }),
-          const Divider(),
-          _buildSwitch('Email Notifications', 'Receive weekly summary reports via email', _emailEnabled, (val) {
-            setState(() => _emailEnabled = val);
-            _saveSettings('notifications_email', val);
-          }),
-        ],
-      ),
+      body: _isLoading 
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                const Text(
+                  'Manage how SafePose alerts you about your daily scans, analytical models, and account activity.',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                ),
+                const SizedBox(height: 24),
+                _buildSwitch(
+                  'Allow Push Notifications', 
+                  'Get instant alerts on your device', 
+                  _pushEnabled, 
+                  (val) => _updateSettings(push: val)
+                ),
+                const Divider(),
+                _buildSwitch(
+                  'Email Notifications', 
+                  'Receive results and summaries via email', 
+                  _emailEnabled, 
+                  (val) => _updateSettings(email: val)
+                ),
+              ],
+            ),
     );
   }
 
