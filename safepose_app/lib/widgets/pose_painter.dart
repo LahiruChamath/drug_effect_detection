@@ -109,17 +109,12 @@ class PosePainter extends CustomPainter {
     double x = point.dx;
     double y = point.dy;
 
-    // ML Kit internally handles point rotation based on InputImageMetadata,
-    // so coordinates are already correctly mapped to the portrait image size!
-    
-    // 1. Mirror horizontally if it's the front camera
-    if (cameraDirection == CameraLensDirection.front) {
-      x = imageSize.width - x;
-    }
+    // ML Kit returns coordinates in the original (non-mirrored) camera frame.
+    // On iOS, CameraPreview already displays the front camera as a mirror,
+    // so we do NOT flip x here — the raw coordinates already match the
+    // mirrored preview.
 
-    // 2. Scale exactly to the UI preview box
-    // Because this canvas is tightly wrapped in the CameraPreview hierarchy,
-    // canvasSize exactly matches the aspect ratio of the live video stream.
+    // Scale exactly to the UI preview box
     final scaleX = canvasSize.width / imageSize.width;
     final scaleY = canvasSize.height / imageSize.height;
 
