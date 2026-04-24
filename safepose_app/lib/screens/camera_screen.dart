@@ -184,7 +184,10 @@ class _CameraScreenState extends State<CameraScreen> {
     if (_cameraController == null) return;
 
     try {
-      // Start video recording (attempt to keep image stream active for skeleton)
+      // On Android, starting video recording kills the image stream.
+      // The skeleton will show the last detected pose during recording,
+      // which is expected behavior — the video itself captures the motion
+      // data that the API needs for analysis.
       await _cameraController!.startVideoRecording();
 
       poseService.resetStats();

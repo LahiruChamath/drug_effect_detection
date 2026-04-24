@@ -377,7 +377,6 @@ def evaluate_xgboost(X, y, le):
         learning_rate=0.2,
         subsample=0.8,
         random_state=42,
-        use_label_encoder=False,
         eval_metric='mlogloss'
     )
     

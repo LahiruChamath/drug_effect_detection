@@ -85,11 +85,28 @@ class MLService:
         return new_data
     
     def extract_features(self, sequence):
-        """Extract features from pose sequence"""
+        """Extract features from pose sequence — v2 (230 features)
+        
+        Must match src/feature_extraction.py exactly:
+          5  raw position stats
+          5  velocity stats
+         99  joint energy (velocity)
+         66  per-joint velocity mean+std   (NEW)
+          5  acceleration stats
+         33  per-joint acceleration mag    (NEW)
+          5  jerk stats
+          2  postural sway
+          2  head sway                     (NEW)
+          2  wrist tremor
+          5  symmetry
+          1  entropy
+        ───────
+        230  total
+        """
         
         features = []
         
-        # Stats features
+        # Stats features helper
         def stats_features(data):
             reshaped = data.reshape(data.shape[0], -1)
             return [
@@ -100,43 +117,57 @@ class MLService:
                 np.median(reshaped)
             ]
         
-        # Velocity
+        # Derivatives
         velocity = np.diff(sequence, axis=0)
         acceleration = np.diff(velocity, axis=0)
         jerk = np.diff(acceleration, axis=0)
         
-        # Raw position stats
+        # ---- Raw position stats (5) ----
         features += stats_features(sequence)
         
-        # Velocity stats + energy
+        # ---- Velocity stats (5) + joint energy (99) ----
         features += stats_features(velocity)
         energy = np.sum(velocity ** 2, axis=0)
         features += energy.flatten().tolist()
         
-        # Acceleration stats
+        # ---- Per-joint velocity mean & std (66) — NEW ----
+        speed = np.linalg.norm(velocity, axis=2)       # (T-1, 33)
+        mean_speed = np.mean(speed, axis=0)             # (33,)
+        std_speed  = np.std(speed, axis=0)              # (33,)
+        features += np.concatenate([mean_speed, std_speed]).tolist()
+        
+        # ---- Acceleration stats (5) ----
         features += stats_features(acceleration)
         
-        # Jerk stats
+        # ---- Per-joint acceleration magnitude (33) — NEW ----
+        accel_mag = np.linalg.norm(acceleration, axis=2)  # (T-2, 33)
+        features += np.mean(accel_mag, axis=0).tolist()    # (33,)
+        
+        # ---- Jerk stats (5) ----
         features += stats_features(jerk)
         
-        # Postural sway
+        # ---- Postural sway (2) ----
         left_hip = sequence[:, 23, :]
         right_hip = sequence[:, 24, :]
         hip_center = (left_hip + right_hip) / 2
         features += [np.std(hip_center[:, 0]), np.std(hip_center[:, 1])]
         
-        # Wrist tremor
+        # ---- Head sway (2) — NEW ----
+        nose = sequence[:, 0, :]
+        features += [np.std(nose[:, 0]), np.std(nose[:, 1])]
+        
+        # ---- Wrist tremor (2) ----
         left_wrist = velocity[:, 15, :]
         right_wrist = velocity[:, 16, :]
         features += [np.sum(left_wrist ** 2), np.sum(right_wrist ** 2)]
         
-        # Symmetry
+        # ---- Symmetry (5) ----
         pairs = [(11, 12), (13, 14), (15, 16), (25, 26), (27, 28)]
         for left, right in pairs:
             diff = sequence[:, left, :] - sequence[:, right, :]
             features.append(np.mean(np.abs(diff)))
         
-        # Entropy
+        # ---- Entropy (1) ----
         reshaped = sequence.reshape(sequence.shape[0], -1)
         hist, _ = np.histogram(reshaped, bins=20, density=True)
         hist = hist + 1e-8
@@ -148,7 +179,7 @@ class MLService:
     def predict(self, frames):
         """Full prediction pipeline with Ensemble Soft Voting"""
         
-        # 1. Pipeline for XGBoost and SVM (200 frames -> 71 extracted features)
+        # 1. Pipeline for XGBoost and SVM (200 frames -> 230 extracted features)
         sequence_200 = self.preprocess_sequence(frames, target_frames=200)
         features = self.extract_features(sequence_200)
         features_scaled = self.scaler.transform(features.reshape(1, -1))
@@ -156,23 +187,23 @@ class MLService:
         xgb_probs = self.xgb_model.predict_proba(features_scaled)[0]
         svm_probs = self.svm_model.predict_proba(features_scaled)[0]
         
-        # 2. Pipeline for LSTM (30 frames -> 66 raw unscaled [X, Y] coordinates)
+        # 2. Pipeline for LSTM (60 frames, 99 features = 33 joints × 3 coords)
         if hasattr(self, 'lstm_model') and self.lstm_model is not None:
             raw_data = np.array(frames)
-            # Extract only X and Y (33 joints * 2 coords = 66 features per frame)
-            raw_xy = raw_data[:, :, :2].reshape(raw_data.shape[0], 66)
+            # Extract X, Y, Z (33 joints * 3 coords = 99 features per frame)
+            raw_xyz = raw_data[:, :, :3].reshape(raw_data.shape[0], 99)
             
-            # Match train_lstm.py padding/interpolation exactly
-            if len(raw_xy) > 30:
-                indices = np.linspace(0, len(raw_xy)-1, 30, dtype=int)
-                lstm_seq = raw_xy[indices]
-            elif len(raw_xy) < 30:
-                padding = np.zeros((30 - len(raw_xy), 66), dtype=np.float32)
-                lstm_seq = np.vstack([raw_xy, padding])
+            target_frames = 60
+            if len(raw_xyz) > target_frames:
+                indices = np.linspace(0, len(raw_xyz)-1, target_frames, dtype=int)
+                lstm_seq = raw_xyz[indices]
+            elif len(raw_xyz) < target_frames:
+                padding = np.zeros((target_frames - len(raw_xyz), 99), dtype=np.float32)
+                lstm_seq = np.vstack([raw_xyz, padding])
             else:
-                lstm_seq = raw_xy
+                lstm_seq = raw_xyz
                 
-            lstm_input = lstm_seq.reshape(1, 30, 66)
+            lstm_input = lstm_seq.reshape(1, target_frames, 99).astype(np.float32)
             lstm_probs = self.lstm_model.predict(lstm_input, verbose=0)[0]
             
             # Average 3 models

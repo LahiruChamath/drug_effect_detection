@@ -4,7 +4,7 @@ class Constants {
   // API Configuration
   // Automatically uses localhost for web (Chrome) and Mac's IP for physical devices
   static const String _webUrl = "http://127.0.0.1:5001";
-  static const String _deviceUrl = "http://192.168.1.93:5001";
+  static const String _deviceUrl = "http://192.168.1.103:5001";
   static String get baseUrl => kIsWeb ? _webUrl : _deviceUrl;
   
   // API Endpoints

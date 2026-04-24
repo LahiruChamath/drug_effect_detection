@@ -1,26 +1,10 @@
 ======================================================================
-  SVM - COMPLETE CLASSIFICATION REPORT
+  SVM — CLASSIFICATION REPORT
 ======================================================================
 
-OVERALL METRICS
-----------------------------------------
-Accuracy:             0.8333 (83.33%)
-Precision (macro):    0.8333
-Precision (weighted): 0.8333
-Recall (macro):       0.8333
-Recall (weighted):    0.8333
-F1-Score (macro):     0.8333
-F1-Score (weighted):  0.8333
-Log Loss:             0.7010
-ROC AUC (macro):      0.9296
-ROC AUC (weighted):   0.9296
-
-
-PER-CLASS METRICS
-----------------------------------------------------------------------
-Class           Precision    Recall       F1-Score     ROC AUC     
-----------------------------------------------------------------------
-none            0.7333       0.7333       0.7333       0.8237      
-stimulant       0.8667       0.8667       0.8667       0.9644      
-depressant      0.8667       0.8667       0.8667       0.9600      
-cannabis        0.8667       0.8667       0.8667       0.9704      
+  accuracy                 : 0.7500
+  precision_macro          : 0.7553
+  recall_macro             : 0.7500
+  f1_macro                 : 0.7504
+  log_loss                 : 0.7953
+  roc_auc_macro            : 0.8981

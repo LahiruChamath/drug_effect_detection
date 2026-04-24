@@ -18,7 +18,7 @@ def compute_jerk(acceleration):
 
 
 # ==========================================================
-# STATISTICAL FEATURE EXTRACTOR
+# STATISTICAL FEATURE EXTRACTOR (global)
 # ==========================================================
 
 def stats_features(data):
@@ -37,6 +37,36 @@ def stats_features(data):
     features.append(np.median(reshaped))
 
     return features
+
+
+# ==========================================================
+# PER-JOINT VELOCITY STATISTICS  (NEW — v2)
+# ==========================================================
+
+def per_joint_velocity_stats(velocity):
+    """
+    For each of the 33 joints compute: mean speed + std speed.
+    velocity shape: (T-1, 33, 3)
+    Output: 33*2 = 66 features
+    """
+    speed = np.linalg.norm(velocity, axis=2)  # (T-1, 33)
+    mean_speed = np.mean(speed, axis=0)        # (33,)
+    std_speed  = np.std(speed, axis=0)         # (33,)
+    return np.concatenate([mean_speed, std_speed]).tolist()
+
+
+# ==========================================================
+# PER-JOINT ACCELERATION MAGNITUDE (NEW — v2)
+# ==========================================================
+
+def per_joint_accel_magnitude(acceleration):
+    """
+    Mean acceleration magnitude per joint.
+    acceleration shape: (T-2, 33, 3)
+    Output: 33 features
+    """
+    mag = np.linalg.norm(acceleration, axis=2)  # (T-2, 33)
+    return np.mean(mag, axis=0).tolist()          # (33,)
 
 
 # ==========================================================
@@ -64,6 +94,19 @@ def postural_sway(sequence):
     sway_y = np.std(hip_center[:, 1])
 
     return [sway_x, sway_y]
+
+
+# ==========================================================
+# HEAD SWAY (NOSE TRAJECTORY)  (NEW — v2)
+# ==========================================================
+
+def head_sway(sequence):
+    """
+    Std of nose (landmark 0) x/y movement — captures head tremor / nodding.
+    Output: 2 features
+    """
+    nose = sequence[:, 0, :]
+    return [np.std(nose[:, 0]), np.std(nose[:, 1])]
 
 
 # ==========================================================
@@ -127,7 +170,12 @@ def extract_features(sequence):
         (200, 33, 3)
 
     Output:
-        Feature vector (~180-220 features)
+        Feature vector (~230 features, up from 129)
+
+    Changelog:
+        v2 — Added per_joint_velocity_stats (+66),
+              per_joint_accel_magnitude (+33), head_sway (+2)
+              Total: 129 + 66 + 33 + 2 = 230 features
     """
 
     features = []
@@ -140,9 +188,15 @@ def extract_features(sequence):
     features += stats_features(velocity)
     features += joint_energy(velocity)
 
+    # ---- Per-joint velocity mean & std (NEW) ----
+    features += per_joint_velocity_stats(velocity)
+
     # ---- Acceleration ----
     acceleration = compute_acceleration(velocity)
     features += stats_features(acceleration)
+
+    # ---- Per-joint acceleration magnitude (NEW) ----
+    features += per_joint_accel_magnitude(acceleration)
 
     # ---- Jerk ----
     jerk = compute_jerk(acceleration)
@@ -150,6 +204,9 @@ def extract_features(sequence):
 
     # ---- Postural sway ----
     features += postural_sway(sequence)
+
+    # ---- Head sway (NEW) ----
+    features += head_sway(sequence)
 
     # ---- Tremor ----
     features += wrist_tremor_energy(velocity)

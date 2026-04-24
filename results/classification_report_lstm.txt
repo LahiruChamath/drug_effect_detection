@@ -1,26 +1,10 @@
 ======================================================================
-  LSTM - COMPLETE CLASSIFICATION REPORT
+  BiLSTM — CLASSIFICATION REPORT
 ======================================================================
 
-OVERALL METRICS
-----------------------------------------
-Accuracy:             0.5833 (58.33%)
-Precision (macro):    0.6042
-Precision (weighted): 0.6042
-Recall (macro):       0.5833
-Recall (weighted):    0.5833
-F1-Score (macro):     0.5810
-F1-Score (weighted):  0.5810
-Log Loss:             1.2882
-ROC AUC (macro):      0.8056
-ROC AUC (weighted):   0.8056
-
-
-PER-CLASS METRICS
-----------------------------------------------------------------------
-Class           Precision    Recall       F1-Score     ROC AUC     
-----------------------------------------------------------------------
-none            0.3333       0.3333       0.3333       0.6296      
-stimulant       0.3333       0.3333       0.3333       0.6667      
-depressant      0.7500       1.0000       0.8571       1.0000      
-cannabis        1.0000       0.6667       0.8000       0.9259      
+  accuracy                 : 0.6100
+  precision_macro          : 0.6173
+  recall_macro             : 0.6100
+  f1_macro                 : 0.6081
+  log_loss                 : 1.0405
+  roc_auc_macro            : 0.8372

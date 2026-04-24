@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import '../services/pose_interface.dart';
@@ -109,10 +110,19 @@ class PosePainter extends CustomPainter {
     double x = point.dx;
     double y = point.dy;
 
-    // ML Kit returns coordinates in the original (non-mirrored) camera frame.
-    // On iOS, CameraPreview already displays the front camera as a mirror,
-    // so we do NOT flip x here — the raw coordinates already match the
-    // mirrored preview.
+    // ML Kit always returns coordinates in the RAW (non-mirrored) camera frame.
+    //
+    // iOS   → CameraPreview mirrors the front camera AND ML Kit coords
+    //          already match the mirrored view. No flip needed.
+    //
+    // Android → CameraPreview mirrors the front camera on screen, but ML Kit
+    //            returns raw (un-mirrored) coords. Flip X to match the preview.
+    final bool isFrontCamera = cameraDirection == CameraLensDirection.front;
+    final bool isAndroid = defaultTargetPlatform == TargetPlatform.android;
+
+    if (isFrontCamera && isAndroid) {
+      x = imageSize.width - x;
+    }
 
     // Scale exactly to the UI preview box
     final scaleX = canvasSize.width / imageSize.width;
