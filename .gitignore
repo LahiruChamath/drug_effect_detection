@@ -44,3 +44,6 @@ models/*.h5
 
 # Environment variables
 .env
+
+# Firebase Secrets
+api/firebase-service-account.json
